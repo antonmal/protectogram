@@ -56,4 +56,4 @@ processes = ["scheduler"]
 
 [deploy]
   # Run migrations once per deploy in an ephemeral VM
-  release_command = "alembic upgrade head"
+  release_command = "cd /app && alembic upgrade head"
