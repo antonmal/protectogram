@@ -1,6 +1,6 @@
 # Fly.io configuration for Protectogram
 app = "protectogram-staging"
-primary_region = "iad"
+primary_region = "cdg"
 
 [env]
 APP_ENV = "staging"
@@ -10,6 +10,16 @@ APP_ENV = "staging"
 protocol = "http"
 internal_port = 8000
 processes = ["web"]
+
+# Port configuration for web service
+[[services.ports]]
+port = 80
+handlers = ["http"]
+force_https = true
+
+[[services.ports]]
+port = 443
+handlers = ["tls", "http"]
 
 # Health checks for web service
 [[services.http_checks]]
@@ -28,31 +38,7 @@ method = "GET"
 path = "/health/ready"
 protocol = "http"
 
-# Process groups
-[processes]
-web = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
-scheduler = "python -m app.scheduler.setup"
-
-# Web process VM
-[[vm]]
-cpu_kind = "shared"
-cpus = 1
-memory_mb = 512
-processes = ["web"]
-
-# Scheduler process VM
-[[vm]]
-cpu_kind = "shared"
-cpus = 1
-memory_mb = 256
-processes = ["scheduler"]
-
-# Metrics endpoint
-[[services]]
-protocol = "http"
-internal_port = 8000
-processes = ["web"]
-
+# Metrics endpoint check
 [[services.http_checks]]
 interval = "120s"
 timeout = "10s"
@@ -60,3 +46,22 @@ grace_period = "5s"
 method = "GET"
 path = "/metrics"
 protocol = "http"
+
+# Process groups
+[processes]
+web = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+scheduler = "python -m app.scheduler.setup"
+
+# Web process VM - increased memory for FastAPI + DB connections + metrics
+[[vm]]
+cpu_kind = "shared"
+cpus = 1
+memory_mb = 1024
+processes = ["web"]
+
+# Scheduler process VM - increased memory for APScheduler + job persistence
+[[vm]]
+cpu_kind = "shared"
+cpus = 1
+memory_mb = 512
+processes = ["scheduler"]
