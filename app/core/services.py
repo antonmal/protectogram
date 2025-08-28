@@ -307,6 +307,28 @@ class FakeTelegramService(TelegramService):
             }
         )
 
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        """Send message with optional reply markup via Telegram."""
+        self.sent_messages.append(
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "reply_markup": reply_markup,
+                "correlation_id": correlation_id,
+            }
+        )
+
+    @property
+    def session(self) -> AsyncSession:
+        """Get the database session."""
+        raise RuntimeError("Session not available in FakeTelegramService")
+
 
 class FakePanicService(PanicService):
     """In-memory fake Panic service for contract tests."""
