@@ -93,7 +93,11 @@ def run_migrations_online() -> None:
     # Run migrations with async engine
     import asyncio
 
-    asyncio.run(connectable.run_sync(do_run_migrations))
+    async def run_async_migrations():
+        async with connectable.begin() as connection:
+            await do_run_migrations(connection)
+
+    asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():
