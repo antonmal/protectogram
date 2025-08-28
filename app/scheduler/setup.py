@@ -1,5 +1,6 @@
 """APScheduler setup with Postgres job store."""
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -17,12 +18,9 @@ scheduler: AsyncIOScheduler | None = None
 
 
 def get_jobstore_url() -> str:
-    """Get jobstore URL from Postgres URL."""
-    # Convert asyncpg URL to psycopg2 URL for APScheduler
-    url = settings.POSTGRES_URL
-    if url.startswith("postgresql+asyncpg://"):
-        url = url.replace("postgresql+asyncpg://", "postgresql://")
-    return url
+    """Get jobstore URL for APScheduler."""
+    # Use dedicated sync database URL for scheduler
+    return os.environ.get("SCHEDULER_DB_URL", settings.POSTGRES_URL)
 
 
 async def setup_scheduler() -> None:
