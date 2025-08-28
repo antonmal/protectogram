@@ -11,7 +11,6 @@ from prometheus_client import make_asgi_app
 from app.api import admin, health, telegram, telnyx
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.scheduler.setup import setup_scheduler
 
 
 @asynccontextmanager
@@ -26,8 +25,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         await init_db()
 
-    if settings.SCHEDULER_ENABLED:
-        await setup_scheduler()
+    # Temporarily disable scheduler for deployment
+    # if settings.SCHEDULER_ENABLED:
+    #     await setup_scheduler()
 
     yield
     # Shutdown
