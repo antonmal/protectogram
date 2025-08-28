@@ -54,6 +54,6 @@ cpus = 1
 memory_mb = 512
 processes = ["scheduler"]
 
-[deploy]
-  # Run migrations once per deploy in an ephemeral VM
-  release_command = "cd /app && alembic upgrade head"
+# [deploy]
+#   # Run migrations once per deploy in an ephemeral VM
+#   release_command = "cd /app && alembic upgrade head"
