@@ -1,3 +1,4 @@
+import asyncio
 import os
 from logging.config import fileConfig
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -22,33 +23,64 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
+# --- STRICT DB URL SOURCE ORDER ---
+# 1) -x db_url=... (CLI override)
+# 2) ALEMBIC_DATABASE_URL (env)
+# 3) sqlalchemy.url from alembic.ini (fallback; we will normalize it too)
+
+
+def _normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
     """
-    Returns (url, connect_args) suitable for asyncpg.
-    - Converts postgres:// → postgresql+asyncpg://
-    - Sets ssl=disable for Fly internal hosts (*.internal or fdaa:)
-    - Sets ssl=require otherwise
+    Normalize any Postgres URL for SQLAlchemy+asyncpg and remove sslmode:
+    - postgres:// → postgresql+asyncpg://
+    - postgresql:// → postgresql+asyncpg://
+    - If host is private (*.internal or fdaa:), enforce ssl=disable and empty connect_args
+    - Else enforce ssl=require (URL param) and connect_args={"ssl": "require"}
+    - Remove any 'sslmode' from query entirely (asyncpg doesn't accept it)
     """
-    # driver
+    if not raw:
+        raise RuntimeError(
+            "Database URL is empty for Alembic. Set ALEMBIC_DATABASE_URL or pass -x db_url=..."
+        )
+
+    # driver normalization
     if raw.startswith("postgres://"):
         raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
     elif raw.startswith("postgresql://"):
         raw = "postgresql+asyncpg://" + raw[len("postgresql://") :]
 
     parts = urlsplit(raw)
-    host = parts.hostname or ""
     q = dict(parse_qsl(parts.query, keep_blank_values=True))
 
+    # remove sslmode completely
+    if "sslmode" in q:
+        q.pop("sslmode", None)
+
+    host = (parts.hostname or "").lower()
     is_internal = host.endswith(".internal") or host.startswith("fdaa:")
+
     if is_internal:
         q["ssl"] = "disable"
-        connect_args = {}  # no SSL for internal
+        connect_args = {}
     else:
         q["ssl"] = "require"
-        connect_args = {"ssl": "require"}  # asyncpg accepts this
+        connect_args = {"ssl": "require"}
 
+    # rebuild query
     raw = urlunsplit(parts._replace(query=urlencode(q)))
+
     return raw, connect_args
+
+
+def _get_db_url_and_args() -> tuple[str, dict]:
+    x = context.get_x_argument(as_dictionary=True) or {}
+    raw = (
+        x.get("db_url")
+        or os.getenv("ALEMBIC_DATABASE_URL")
+        or context.config.get_main_option("sqlalchemy.url")
+    )
+    url, connect_args = _normalize_asyncpg_url(raw)
+    return url, connect_args
 
 
 def get_database_url() -> str:
@@ -98,15 +130,12 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Get the database URL and normalize for asyncpg
-    database_url = get_database_url()
-    db_url, connect_args = normalize_asyncpg_url(database_url)
+    db_url, connect_args = _get_db_url_and_args()
 
-    # Create async engine for SQLAlchemy 2.x
     connectable = create_async_engine(
         db_url,
-        poolclass=pool.NullPool,
         pool_pre_ping=True,
+        poolclass=pool.NullPool,
         connect_args=connect_args,
     )
 
@@ -115,12 +144,10 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
-    # Run migrations with async engine
-    import asyncio
-
     async def run_async_migrations():
         async with connectable.begin() as connection:
-            await do_run_migrations(connection)
+            await connection.run_sync(do_run_migrations)
+        await connectable.dispose()
 
     asyncio.run(run_async_migrations())
 

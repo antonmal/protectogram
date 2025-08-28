@@ -15,32 +15,44 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 
-def normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
+def _normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
     """
-    Returns (url, connect_args) suitable for asyncpg.
-    - Converts postgres:// → postgresql+asyncpg://
-    - Sets ssl=disable for Fly internal hosts (*.internal or fdaa:)
-    - Sets ssl=require otherwise
+    Normalize any Postgres URL for SQLAlchemy+asyncpg and remove sslmode:
+    - postgres:// → postgresql+asyncpg://
+    - postgresql:// → postgresql+asyncpg://
+    - If host is private (*.internal or fdaa:), enforce ssl=disable and empty connect_args
+    - Else enforce ssl=require (URL param) and connect_args={"ssl": "require"}
+    - Remove any 'sslmode' from query entirely (asyncpg doesn't accept it)
     """
-    # driver
+    if not raw:
+        raise RuntimeError("Database URL is empty")
+
+    # driver normalization
     if raw.startswith("postgres://"):
         raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
     elif raw.startswith("postgresql://"):
         raw = "postgresql+asyncpg://" + raw[len("postgresql://") :]
 
     parts = urlsplit(raw)
-    host = parts.hostname or ""
     q = dict(parse_qsl(parts.query, keep_blank_values=True))
 
+    # remove sslmode completely
+    if "sslmode" in q:
+        q.pop("sslmode", None)
+
+    host = (parts.hostname or "").lower()
     is_internal = host.endswith(".internal") or host.startswith("fdaa:")
+
     if is_internal:
         q["ssl"] = "disable"
-        connect_args = {}  # no SSL for internal
+        connect_args = {}
     else:
         q["ssl"] = "require"
-        connect_args = {"ssl": "require"}  # asyncpg accepts this
+        connect_args = {"ssl": "require"}
 
+    # rebuild query
     raw = urlunsplit(parts._replace(query=urlencode(q)))
+
     return raw, connect_args
 
 
@@ -53,7 +65,7 @@ def get_engine() -> AsyncEngine:
     """Get or create the async engine."""
     global _engine
     if _engine is None:
-        db_url, connect_args = normalize_asyncpg_url(settings.POSTGRES_URL)
+        db_url, connect_args = _normalize_asyncpg_url(settings.POSTGRES_URL)
         _engine = create_async_engine(
             db_url,
             echo=settings.DEBUG,
