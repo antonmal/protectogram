@@ -41,7 +41,11 @@ def _normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
         q.pop("sslmode", None)
 
     host = (parts.hostname or "").lower()
-    is_internal = host.endswith(".internal") or host.startswith("fdaa:")
+    is_internal = (
+        host.endswith(".internal")
+        or host.endswith(".flycast")
+        or host.startswith("fdaa:")
+    )
 
     if is_internal:
         q["ssl"] = "disable"
