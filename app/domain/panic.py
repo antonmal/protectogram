@@ -1,41 +1,80 @@
-"""Panic incident domain logic."""
+"""Panic incident domain logic for Prompt 6 implementation."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.metrics import panic_acknowledged, panic_canceled, panic_incidents_started
-
-# from app.integrations.telegram.outbox import send_telegram_alert  # Will be implemented in Prompt 6
-from app.integrations.telnyx.call_control import initiate_call_cascade
-from app.scheduler.setup import cancel_incident_jobs, schedule_action
-from app.storage.models import Alert, Incident, MemberLink, User
+from app.storage.models import Incident, MemberLink, User
 
 logger = get_logger(__name__)
+
+
+# Incident status constants
+INCIDENT_STATUS_ACTIVE = "active"
+INCIDENT_STATUS_ACKNOWLEDGED = "acknowledged"
+INCIDENT_STATUS_CANCELED = "canceled"
+INCIDENT_STATUS_EXHAUSTED = "exhausted"
+
+
+def generate_idempotency_key(incident_id: int, action: str, **kwargs) -> str:
+    """
+    Generate idempotency key for outbound operations.
+
+    Examples:
+    - incident:{id}:telegram:guardian:{gid}:alert_initial
+    - incident:{id}:call:{gid}:attempt:{n}
+    - incident:{id}:telegram:ward:{type}
+    """
+    parts = [f"incident:{incident_id}", action]
+    for key, value in kwargs.items():
+        parts.append(f"{key}:{value}")
+    return ":".join(parts)
 
 
 async def create_panic_incident(
     session: AsyncSession,
     traveler_telegram_id: str,
     correlation_id: str | None = None,
-) -> Incident:
-    """Create a new panic incident."""
+) -> Incident | None:
+    """
+    Create a new panic incident.
+
+    Returns None if user already has an active incident.
+    """
     # Get or create traveler user
     traveler = await get_or_create_user(session, traveler_telegram_id)
 
-    # Create incident
+    # Check if user already has an active incident
+    result = await session.execute(
+        select(Incident).where(
+            Incident.traveler_user_id == traveler.id,
+            Incident.status == INCIDENT_STATUS_ACTIVE,
+        )
+    )
+    existing_incident = result.scalar_one_or_none()
+
+    if existing_incident:
+        logger.info(
+            "User already has active incident",
+            incident_id=existing_incident.id,
+            traveler_id=traveler.id,
+            correlation_id=correlation_id,
+        )
+        return existing_incident
+
+    # Create new incident
     incident = Incident(
         traveler_user_id=traveler.id,
-        status="active",
+        status=INCIDENT_STATUS_ACTIVE,
     )
     session.add(incident)
     await session.flush()  # Get the ID
 
     logger.info(
-        "Created panic incident",
+        "Created new panic incident",
         incident_id=incident.id,
         traveler_id=traveler.id,
         correlation_id=correlation_id,
@@ -72,90 +111,23 @@ async def get_active_watchers(
     session: AsyncSession,
     traveler_user_id: int,
 ) -> list[MemberLink]:
-    """Get active watchers for a traveler."""
+    """
+    Get active watchers for a traveler, ordered by priority.
+
+    Priority is determined by member_links.created_at (earlier = higher priority).
+    """
     result = await session.execute(
         select(MemberLink)
         .where(
             MemberLink.traveler_user_id == traveler_user_id,
             MemberLink.status == "active",
         )
-        .order_by(MemberLink.call_priority)
+        .order_by(MemberLink.created_at)  # Earlier created = higher priority
     )
     return list(result.scalars().all())
 
 
-async def start_panic_cascade(
-    session: AsyncSession,
-    incident: Incident,
-    correlation_id: str | None = None,
-) -> None:
-    """Start the panic cascade for an incident."""
-    # Get active watchers
-    watchers = await get_active_watchers(session, incident.traveler_user_id)
-
-    if not watchers:
-        logger.warning(
-            "No active watchers found",
-            incident_id=incident.id,
-            traveler_id=incident.traveler_user_id,
-        )
-        return
-
-    # Create alerts for each watcher
-    for watcher_link in watchers:
-        # Telegram alert
-        if watcher_link.telegram_enabled:
-            alert = Alert(
-                incident_id=incident.id,
-                type="telegram",
-                audience_user_id=watcher_link.watcher_user_id,
-                status="pending",
-            )
-            session.add(alert)
-            await session.flush()
-
-            # Send Telegram alert (will be implemented in Prompt 6)
-            # await send_telegram_alert(
-            #     session,
-            #     alert.id,
-            #     watcher_link.watcher_user_id,
-            #     incident.traveler_user_id,
-            #     correlation_id,
-            # )
-
-        # Call alert
-        if watcher_link.calls_enabled:
-            alert = Alert(
-                incident_id=incident.id,
-                type="call",
-                audience_user_id=watcher_link.watcher_user_id,
-                status="pending",
-            )
-            session.add(alert)
-            await session.flush()
-
-            # Initiate call cascade
-            await initiate_call_cascade(
-                session,
-                alert.id,
-                watcher_link,
-                correlation_id,
-            )
-
-    # Schedule reminder
-    await schedule_action(
-        incident.id,
-        "panic_reminder",
-        datetime.now(UTC) + timedelta(seconds=settings.DEFAULT_REMINDER_INTERVAL_SEC),
-        {"reminder_count": 1},
-    )
-
-    logger.info(
-        "Started panic cascade",
-        incident_id=incident.id,
-        watcher_count=len(watchers),
-        correlation_id=correlation_id,
-    )
+# TODO: start_panic_cascade will be implemented in Prompt 6 with proper call cascade logic
 
 
 async def acknowledge_panic(
@@ -164,25 +136,34 @@ async def acknowledge_panic(
     acknowledged_by_user_id: int,
     correlation_id: str | None = None,
 ) -> bool:
-    """Acknowledge a panic incident."""
-    result = await session.execute(select(Incident).where(Incident.id == incident_id))
+    """
+    Acknowledge a panic incident.
+
+    This stops retries and hangs up calls.
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.id == incident_id, Incident.status == INCIDENT_STATUS_ACTIVE
+        )
+    )
     incident = result.scalar_one_or_none()
 
-    if not incident or incident.status != "active":
+    if not incident:
         logger.warning(
             "Cannot acknowledge incident - not found or not active",
             incident_id=incident_id,
-            status=incident.status if incident else None,
+            correlation_id=correlation_id,
         )
         return False
 
     # Update incident
-    incident.status = "acknowledged"
+    incident.status = INCIDENT_STATUS_ACKNOWLEDGED
     incident.acknowledged_by_user_id = acknowledged_by_user_id
     incident.ack_at = datetime.now(UTC)
 
-    # Cancel scheduled jobs
-    await cancel_incident_jobs(incident_id)
+    # TODO: Cancel scheduled jobs and hang up calls (will be implemented in Prompt 6)
+    # await cancel_incident_jobs(incident_id)
+    # await hang_up_all_calls(incident_id)
 
     # Increment metric
     panic_acknowledged.inc()
@@ -203,24 +184,34 @@ async def cancel_panic(
     canceled_by_user_id: int,
     correlation_id: str | None = None,
 ) -> bool:
-    """Cancel a panic incident."""
-    result = await session.execute(select(Incident).where(Incident.id == incident_id))
+    """
+    Cancel a panic incident.
+
+    This stops jobs and calls.
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.id == incident_id,
+            Incident.status.in_([INCIDENT_STATUS_ACTIVE, INCIDENT_STATUS_ACKNOWLEDGED]),
+        )
+    )
     incident = result.scalar_one_or_none()
 
-    if not incident or incident.status not in ["active", "acknowledged"]:
+    if not incident:
         logger.warning(
             "Cannot cancel incident - not found or already canceled",
             incident_id=incident_id,
-            status=incident.status if incident else None,
+            correlation_id=correlation_id,
         )
         return False
 
     # Update incident
-    incident.status = "canceled"
+    incident.status = INCIDENT_STATUS_CANCELED
     incident.canceled_at = datetime.now(UTC)
 
-    # Cancel scheduled jobs
-    await cancel_incident_jobs(incident_id)
+    # TODO: Cancel scheduled jobs and hang up calls (will be implemented in Prompt 6)
+    # await cancel_incident_jobs(incident_id)
+    # await hang_up_all_calls(incident_id)
 
     # Increment metric
     panic_canceled.inc()
@@ -235,96 +226,65 @@ async def cancel_panic(
     return True
 
 
-async def send_panic_reminder(
+async def exhaust_incident(
     session: AsyncSession,
     incident_id: int,
-    payload: dict | None = None,
-) -> None:
-    """Send a panic reminder."""
-    reminder_count = payload.get("reminder_count", 1) if payload else 1
+    correlation_id: str | None = None,
+) -> bool:
+    """
+    Mark incident as exhausted (no acknowledgment after retries).
 
-    # Check if incident is still active
-    result = await session.execute(select(Incident).where(Incident.id == incident_id))
+    This is called when all retry attempts are exhausted.
+    """
+    result = await session.execute(
+        select(Incident).where(
+            Incident.id == incident_id, Incident.status == INCIDENT_STATUS_ACTIVE
+        )
+    )
     incident = result.scalar_one_or_none()
 
-    if not incident or incident.status != "active":
-        logger.info(
-            "Skipping reminder - incident not active",
+    if not incident:
+        logger.warning(
+            "Cannot exhaust incident - not found or not active",
             incident_id=incident_id,
-            status=incident.status if incident else None,
+            correlation_id=correlation_id,
         )
-        return
+        return False
 
-    # Get watchers and send reminders
-    watchers = await get_active_watchers(session, incident.traveler_user_id)
+    # Update incident
+    incident.status = INCIDENT_STATUS_EXHAUSTED
+    incident.exhausted_at = datetime.now(UTC)
 
-    for watcher_link in watchers:
-        if watcher_link.telegram_enabled:
-            # Send Telegram alert (will be implemented in Prompt 6)
-            # await send_telegram_alert(
-            #     session,
-            #     None,  # No specific alert ID for reminders
-            #     watcher_link.watcher_user_id,
-            #     incident.traveler_user_id,
-            #     None,
-            #     is_reminder=True,
-            #     reminder_count=reminder_count,
-            # )
-            pass  # Placeholder for Prompt 6 implementation
+    logger.info(
+        "Incident exhausted",
+        incident_id=incident_id,
+        correlation_id=correlation_id,
+    )
 
-    # Schedule next reminder if needed
-    if reminder_count < 5:  # Max 5 reminders
-        await schedule_action(
-            incident_id,
-            "panic_reminder",
-            datetime.now(UTC)
-            + timedelta(seconds=settings.DEFAULT_REMINDER_INTERVAL_SEC),
-            {"reminder_count": reminder_count + 1},
-        )
+    return True
 
 
-async def retry_call_attempt(
+async def get_incident_by_id(
     session: AsyncSession,
     incident_id: int,
-    payload: dict | None = None,
-) -> None:
-    """Retry a failed call attempt."""
-    alert_id = payload.get("alert_id") if payload else None
-    attempt_no = payload.get("attempt_no", 1) if payload else 1
+) -> Incident | None:
+    """Get incident by ID."""
+    result = await session.execute(select(Incident).where(Incident.id == incident_id))
+    return result.scalar_one_or_none()
 
-    if not alert_id:
-        logger.error("Missing alert_id for call retry")
-        return
 
-    # Get the alert
-    result = await session.execute(select(Alert).where(Alert.id == alert_id))
-    alert = result.scalar_one_or_none()
-
-    if not alert:
-        logger.error("Alert not found for retry", alert_id=alert_id)
-        return
-
-    # Get member link
+async def get_active_incident_for_user(
+    session: AsyncSession,
+    traveler_user_id: int,
+) -> Incident | None:
+    """Get active incident for a user."""
     result = await session.execute(
-        select(MemberLink).where(
-            MemberLink.watcher_user_id == alert.audience_user_id,
-            MemberLink.traveler_user_id == alert.incident.traveler_user_id,
+        select(Incident).where(
+            Incident.traveler_user_id == traveler_user_id,
+            Incident.status == INCIDENT_STATUS_ACTIVE,
         )
     )
-    member_link = result.scalar_one_or_none()
-
-    if not member_link:
-        logger.error("Member link not found for retry", alert_id=alert_id)
-        return
-
-    # Retry the call
-    await initiate_call_cascade(
-        session,
-        alert_id,
-        member_link,
-        None,
-        attempt_no=attempt_no,
-    )
+    return result.scalar_one_or_none()
 
 
 async def trigger_panic_test(session: AsyncSession) -> str:
@@ -339,7 +299,9 @@ async def trigger_panic_test(session: AsyncSession) -> str:
     # Create test incident
     incident = await create_panic_incident(session, test_user.telegram_id)
 
-    # Start cascade
-    await start_panic_cascade(session, incident)
-
-    return str(incident.id)
+    if incident:
+        # TODO: Start cascade (will be implemented in Prompt 6)
+        # await start_panic_cascade(session, incident)
+        return str(incident.id)
+    else:
+        return "No new incident created (user already has active incident)"

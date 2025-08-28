@@ -53,7 +53,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response.status_code == 400
 
@@ -72,7 +72,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=json.dumps(payload),
+            content=json.dumps(payload),
         )
         assert response.status_code == 400
 
@@ -93,7 +93,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response.status_code == 200
         data = response.json()
@@ -116,7 +116,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response.status_code == 200
         data = response.json()
@@ -139,7 +139,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response.status_code == 200
         data = response.json()
@@ -162,7 +162,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response.status_code == 200
         data = response.json()
@@ -186,7 +186,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response1.status_code == 200
 
@@ -197,7 +197,7 @@ class TestTelnyxWebhookContract:
                 "Telnyx-Signature-Ed25519": signature,
                 "Content-Type": "application/json",
             },
-            data=payload,
+            content=payload,
         )
         assert response2.status_code == 200
         data = response2.json()

@@ -121,6 +121,20 @@ class DatabaseTelegramService(TelegramService):
 
         await send_confirmation_message(self.session, chat_id, message, correlation_id)
 
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        """Send message with optional reply markup via Telegram."""
+        from app.integrations.telegram.outbox import send_telegram_message
+
+        await send_telegram_message(
+            self.session, chat_id, text, reply_markup, correlation_id
+        )
+
 
 class DatabasePanicService(PanicService):
     """Database-backed Panic service implementation."""
@@ -131,14 +145,30 @@ class DatabasePanicService(PanicService):
     async def create_panic_incident(
         self, traveler_telegram_id: str, correlation_id: str | None = None
     ) -> str:
-        """Create a new panic incident (placeholder for Prompt 6)."""
-        # This will be implemented in Prompt 6
-        logger.info(
-            "Would create panic incident",
-            traveler_telegram_id=traveler_telegram_id,
-            correlation_id=correlation_id,
+        """Create a new panic incident."""
+        from app.domain.panic import create_panic_incident as domain_create_incident
+
+        incident = await domain_create_incident(
+            self.session,
+            traveler_telegram_id,
+            correlation_id,
         )
-        return "placeholder_incident_id"
+
+        if incident:
+            logger.info(
+                "Panic incident created",
+                incident_id=incident.id,
+                traveler_telegram_id=traveler_telegram_id,
+                correlation_id=correlation_id,
+            )
+            return str(incident.id)
+        else:
+            logger.warning(
+                "Failed to create panic incident - active incident exists",
+                traveler_telegram_id=traveler_telegram_id,
+                correlation_id=correlation_id,
+            )
+            return ""
 
     async def acknowledge_panic(
         self,
@@ -146,15 +176,32 @@ class DatabasePanicService(PanicService):
         acknowledged_by_user_id: int,
         correlation_id: str | None = None,
     ) -> bool:
-        """Acknowledge a panic incident (placeholder for Prompt 6)."""
-        # This will be implemented in Prompt 6
-        logger.info(
-            "Would acknowledge panic",
-            incident_id=incident_id,
-            acknowledged_by_user_id=acknowledged_by_user_id,
-            correlation_id=correlation_id,
+        """Acknowledge a panic incident."""
+        from app.domain.panic import acknowledge_panic as domain_acknowledge
+
+        success = await domain_acknowledge(
+            self.session,
+            incident_id,
+            acknowledged_by_user_id,
+            correlation_id,
         )
-        return True
+
+        if success:
+            logger.info(
+                "Panic incident acknowledged",
+                incident_id=incident_id,
+                acknowledged_by_user_id=acknowledged_by_user_id,
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.warning(
+                "Failed to acknowledge panic incident",
+                incident_id=incident_id,
+                acknowledged_by_user_id=acknowledged_by_user_id,
+                correlation_id=correlation_id,
+            )
+
+        return success
 
     async def cancel_panic(
         self,
@@ -162,15 +209,32 @@ class DatabasePanicService(PanicService):
         canceled_by_user_id: int,
         correlation_id: str | None = None,
     ) -> bool:
-        """Cancel a panic incident (placeholder for Prompt 6)."""
-        # This will be implemented in Prompt 6
-        logger.info(
-            "Would cancel panic",
-            incident_id=incident_id,
-            canceled_by_user_id=canceled_by_user_id,
-            correlation_id=correlation_id,
+        """Cancel a panic incident."""
+        from app.domain.panic import cancel_panic as domain_cancel
+
+        success = await domain_cancel(
+            self.session,
+            incident_id,
+            canceled_by_user_id,
+            correlation_id,
         )
-        return True
+
+        if success:
+            logger.info(
+                "Panic incident canceled",
+                incident_id=incident_id,
+                canceled_by_user_id=canceled_by_user_id,
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.warning(
+                "Failed to cancel panic incident",
+                incident_id=incident_id,
+                canceled_by_user_id=canceled_by_user_id,
+                correlation_id=correlation_id,
+            )
+
+        return success
 
 
 class FakeTelegramService(TelegramService):
@@ -277,6 +341,11 @@ class TelnyxService(ABC):
     """Abstract interface for Telnyx operations."""
 
     @abstractmethod
+    def get_session(self) -> AsyncSession:
+        """Get the database session."""
+        pass
+
+    @abstractmethod
     async def store_inbox_event(
         self, provider: str, event_id: str, payload: dict[str, Any]
     ) -> InboxEvent:
@@ -309,6 +378,10 @@ class DatabaseTelnyxService(TelnyxService):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def get_session(self) -> AsyncSession:
+        """Get the database session."""
+        return self.session
+
     async def store_inbox_event(
         self, provider: str, event_id: str, payload: dict[str, Any]
     ) -> InboxEvent:
@@ -329,7 +402,7 @@ class DatabaseTelnyxService(TelnyxService):
         """Process Telnyx webhook event."""
         from app.integrations.telnyx.handlers import handle_telnyx_event
 
-        await handle_telnyx_event(event_data, self.session, correlation_id)
+        await handle_telnyx_event(event_data, self, correlation_id)
 
     async def create_call_attempt(
         self, alert_id: int, to_e164: str, attempt_no: int = 1
@@ -349,13 +422,30 @@ class DatabaseTelnyxService(TelnyxService):
 
     async def update_call_attempt(self, call_attempt_id: int, **kwargs: Any) -> None:
         """Update call attempt record."""
-        from sqlalchemy import update
+        from sqlalchemy import select
 
-        await self.session.execute(
-            update(CallAttempt)
-            .where(CallAttempt.id == call_attempt_id)
-            .values(**kwargs)
+        result = await self.session.execute(
+            select(CallAttempt).where(CallAttempt.id == call_attempt_id)
         )
+        call_attempt = result.scalar_one_or_none()
+
+        if call_attempt:
+            for key, value in kwargs.items():
+                if hasattr(call_attempt, key):
+                    setattr(call_attempt, key, value)
+
+            await self.session.flush()
+
+            logger.info(
+                "Call attempt updated",
+                call_attempt_id=call_attempt_id,
+                updates=kwargs,
+            )
+        else:
+            logger.warning(
+                "Call attempt not found for update",
+                call_attempt_id=call_attempt_id,
+            )
 
 
 class FakeTelnyxService(TelnyxService):
@@ -366,6 +456,12 @@ class FakeTelnyxService(TelnyxService):
         self.call_attempts: dict[int, CallAttempt] = {}
         self.processed_events: list[dict[str, Any]] = []
         self.call_attempt_counter = 0
+        self._session: AsyncSession | None = None
+
+    def get_session(self) -> AsyncSession:
+        if self._session is None:
+            raise RuntimeError("Session not set for FakeTelnyxService")
+        return self._session
 
     async def store_inbox_event(
         self, provider: str, event_id: str, payload: dict[str, Any]

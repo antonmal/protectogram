@@ -1,9 +1,14 @@
-"""Telnyx event handlers for Prompt 5 implementation."""
+"""Telnyx event handlers for Prompt 6 implementation."""
 
 from typing import Any
 
 from app.core.logging import get_logger
 from app.core.services import TelnyxService
+from app.integrations.telnyx.cascade import (
+    handle_call_answered,
+    handle_call_hangup,
+    handle_dtmf_gather,
+)
 
 logger = get_logger(__name__)
 
@@ -49,15 +54,22 @@ async def _handle_call_initiated(
 ) -> None:
     """Handle call.initiated event."""
     call_id = event_data.get("data", {}).get("payload", {}).get("call_control_id", "")
+    client_state = event_data.get("data", {}).get("payload", {}).get("client_state", {})
 
     logger.info(
         "Call initiated",
         call_id=call_id,
+        client_state=client_state,
         correlation_id=correlation_id,
     )
 
-    # For Prompt 5: Just log the event
-    # Call attempt creation will be handled in Prompt 6
+    # Extract call attempt ID from client state
+    call_attempt_id = client_state.get("call_attempt_id")
+    if call_attempt_id:
+        # Update call attempt with Telnyx call ID
+        await telnyx_service.update_call_attempt(
+            call_attempt_id, telnyx_call_id=call_id
+        )
 
 
 async def _handle_call_answered(
@@ -67,15 +79,30 @@ async def _handle_call_answered(
 ) -> None:
     """Handle call.answered event."""
     call_id = event_data.get("data", {}).get("payload", {}).get("call_control_id", "")
+    client_state = event_data.get("data", {}).get("payload", {}).get("client_state", {})
 
     logger.info(
         "Call answered",
         call_id=call_id,
+        client_state=client_state,
         correlation_id=correlation_id,
     )
 
-    # For Prompt 5: Just log the event
-    # TTS playback will be handled in Prompt 6
+    # Extract data from client state
+    incident_id = client_state.get("incident_id")
+    watcher_id = client_state.get("watcher_id")
+    call_attempt_id = client_state.get("call_attempt_id")
+
+    if incident_id and watcher_id and call_attempt_id:
+        # Handle call answered via cascade module
+        await handle_call_answered(
+            telnyx_service.get_session(),
+            call_id,
+            incident_id,
+            watcher_id,
+            call_attempt_id,
+            correlation_id,
+        )
 
 
 async def _handle_call_hangup(
@@ -86,16 +113,32 @@ async def _handle_call_hangup(
     """Handle call.hangup event."""
     call_id = event_data.get("data", {}).get("payload", {}).get("call_control_id", "")
     hangup_cause = event_data.get("data", {}).get("payload", {}).get("hangup_cause", "")
+    client_state = event_data.get("data", {}).get("payload", {}).get("client_state", {})
 
     logger.info(
         "Call hung up",
         call_id=call_id,
         hangup_cause=hangup_cause,
+        client_state=client_state,
         correlation_id=correlation_id,
     )
 
-    # For Prompt 5: Just log the event
-    # Call attempt completion will be handled in Prompt 6
+    # Extract data from client state
+    incident_id = client_state.get("incident_id")
+    watcher_id = client_state.get("watcher_id")
+    call_attempt_id = client_state.get("call_attempt_id")
+
+    if incident_id and watcher_id and call_attempt_id:
+        # Handle call hangup via cascade module
+        await handle_call_hangup(
+            telnyx_service.get_session(),
+            call_id,
+            incident_id,
+            watcher_id,
+            call_attempt_id,
+            hangup_cause,
+            correlation_id,
+        )
 
 
 async def _handle_call_gather_ended(
@@ -106,13 +149,29 @@ async def _handle_call_gather_ended(
     """Handle call.gather.ended event (DTMF detection)."""
     call_id = event_data.get("data", {}).get("payload", {}).get("call_control_id", "")
     digits = event_data.get("data", {}).get("payload", {}).get("digits", "")
+    client_state = event_data.get("data", {}).get("payload", {}).get("client_state", {})
 
     logger.info(
         "Call gather ended",
         call_id=call_id,
         digits=digits,
+        client_state=client_state,
         correlation_id=correlation_id,
     )
 
-    # For Prompt 5: Just log the event
-    # DTMF processing will be handled in Prompt 6
+    # Extract data from client state
+    incident_id = client_state.get("incident_id")
+    watcher_id = client_state.get("watcher_id")
+    call_attempt_id = client_state.get("call_attempt_id")
+
+    if incident_id and watcher_id and call_attempt_id:
+        # Handle DTMF gather via cascade module
+        await handle_dtmf_gather(
+            telnyx_service.get_session(),
+            call_id,
+            incident_id,
+            watcher_id,
+            call_attempt_id,
+            digits,
+            correlation_id,
+        )

@@ -28,13 +28,21 @@ async def handle_scheduled_action(
     try:
         async with get_session_factory()() as session:
             if action_type == "panic_reminder":
-                from app.domain.panic import send_panic_reminder
-
-                await send_panic_reminder(session, incident_id, payload)
+                # TODO: Implement panic reminder logic
+                logger.info(
+                    "Panic reminder action (not yet implemented)",
+                    incident_id=incident_id,
+                    payload=payload,
+                )
             elif action_type == "call_retry":
-                from app.domain.panic import retry_call_attempt
+                from app.integrations.telnyx.cascade import handle_call_retry
 
-                await retry_call_attempt(session, incident_id, payload)
+                if payload is not None:
+                    await handle_call_retry(session, incident_id, payload)
+                else:
+                    logger.warning(
+                        "Call retry payload is None", incident_id=incident_id
+                    )
             else:
                 logger.warning(
                     "Unknown action type",

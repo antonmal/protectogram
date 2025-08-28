@@ -51,7 +51,7 @@ async def send_confirmation_message(
         )
 
         # Send message via Telegram API
-        success = await send_telegram_message(payload)
+        success = await _send_telegram_api_message(payload)
 
         if success:
             await mark_outbox_sent(session, outbox_message.id, "telegram_msg_id")
@@ -73,7 +73,7 @@ async def send_confirmation_message(
         )
 
 
-async def send_telegram_message(payload: dict[str, Any]) -> bool:
+async def _send_telegram_api_message(payload: dict[str, Any]) -> bool:
     """Send message via Telegram Bot API."""
     try:
         import httpx
@@ -100,3 +100,62 @@ async def send_telegram_message(payload: dict[str, Any]) -> bool:
 
 # Domain-specific functions will be implemented in Prompt 6
 # For now, we only have the core message sending infrastructure
+
+
+async def send_telegram_message(
+    session: AsyncSession,
+    chat_id: int,
+    text: str,
+    reply_markup: dict[str, Any] | None = None,
+    correlation_id: str | None = None,
+) -> None:
+    """Send message with optional reply markup via Telegram."""
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+    }
+
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    # Generate idempotency key
+    idempotency_key = generate_idempotency_key(payload)
+
+    # Check for duplicate
+    if await is_duplicate_outbox_message(session, idempotency_key):
+        logger.info(
+            "Duplicate Telegram message ignored", idempotency_key=idempotency_key[:8]
+        )
+        return
+
+    try:
+        # Store outbox message
+        outbox_message = await store_outbox_message(
+            session,
+            "telegram",
+            idempotency_key,
+            payload,
+        )
+
+        # Send message via Telegram API
+        success = await _send_telegram_api_message(payload)
+
+        if success:
+            await mark_outbox_sent(session, outbox_message.id, "telegram_msg_id")
+            telegram_messages_sent.labels(message_type="menu").inc()
+
+            logger.info(
+                "Telegram message sent",
+                chat_id=chat_id,
+                correlation_id=correlation_id,
+            )
+        else:
+            await mark_outbox_failed(session, outbox_message.id, "Failed to send")
+
+    except Exception as e:
+        logger.error(
+            "Failed to send Telegram message",
+            chat_id=chat_id,
+            error=str(e),
+        )

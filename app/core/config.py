@@ -37,6 +37,32 @@ class Settings(BaseSettings):
     # Database Control
     ENABLE_DB: bool = Field(default=True, description="Enable database connections")
 
+    # Access Control Settings
+    ALLOWED_E164_NUMBERS: str = Field(
+        default="", description="Comma-separated list of allowed E.164 phone numbers"
+    )
+    FEATURE_ALLOW_ONLY_WHITELIST: bool = Field(
+        default=False, description="Enable access control via allowlist"
+    )
+
+    # Call Cascade Settings
+    PANIC_RETRY_INTERVAL_SEC: int = Field(
+        default=120, description="Retry interval for panic calls (seconds)"
+    )
+    CALL_RING_TIMEOUT_SEC: int = Field(
+        default=25, description="Call ring timeout duration (seconds)"
+    )
+    CALL_MAX_RETRIES: int = Field(default=2, description="Maximum call retry attempts")
+    INCIDENT_MAX_TOTAL_RING_SEC: int = Field(
+        default=180, description="Total ring time cap per incident (seconds)"
+    )
+    FEATURE_AMD_ENABLED: bool = Field(
+        default=False, description="Enable answering machine detection"
+    )
+
+    # Localization Settings
+    DEFAULT_LOCALE: str = Field(default="ru-RU", description="Default locale for users")
+
     # Call Cascade Defaults
     DEFAULT_RING_TIMEOUT_SEC: int = Field(
         default=25, description="Default ring timeout"

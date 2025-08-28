@@ -27,6 +27,7 @@ class User(Base):
     telegram_id = Column(String(50), unique=True, nullable=False, index=True)
     phone_e164 = Column(String(20), nullable=True)
     display_name = Column(String(100), nullable=False)
+    preferred_locale = Column(String(10), default="ru-RU", nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -94,13 +95,20 @@ class Incident(Base):
     traveler_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(
         String(20), default="active", nullable=False
-    )  # active, acknowledged, canceled
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
-    )
+    )  # active, acknowledged, canceled, exhausted
     acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     ack_at = Column(DateTime(timezone=True), nullable=True)
     canceled_at = Column(DateTime(timezone=True), nullable=True)
+    exhausted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
 
     # Relationships
     traveler = relationship(
@@ -113,6 +121,9 @@ class Incident(Base):
     )
     alerts = relationship("Alert", back_populates="incident")
     scheduled_actions = relationship("ScheduledAction", back_populates="incident")
+
+    # Constraints will be handled in migration
+    __table_args__ = ()
 
 
 class Alert(Base):
@@ -157,6 +168,7 @@ class CallAttempt(Base):
     attempt_no = Column(Integer, default=1, nullable=False)
     result = Column(String(20), nullable=True)  # answered, busy, no_answer, failed
     dtmf_received = Column(String(10), nullable=True)
+    amd_result = Column(String(50), nullable=True)  # human, machine, unknown
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
     error_code = Column(String(50), nullable=True)
