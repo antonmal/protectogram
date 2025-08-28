@@ -1,5 +1,6 @@
 import os
 from logging.config import fileConfig
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from alembic import context
 from sqlalchemy import pool
@@ -21,6 +22,34 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _normalize_asyncpg_url(url: str) -> str:
+    """Normalize database URL for asyncpg compatibility."""
+    # ensure async driver
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+
+    # rewrite sslmode -> ssl
+    parts = urlsplit(url)
+    q = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if "sslmode" in q:
+        # map libpq-style values to asyncpg 'ssl' values
+        m = {
+            "disable": "disable",
+            "prefer": "prefer",
+            "allow": "allow",
+            "require": "require",
+            "verify-ca": "verify-ca",
+            "verify-full": "verify-full",
+        }
+        q["ssl"] = m.get(q["sslmode"], "require")
+        del q["sslmode"]
+        parts = parts._replace(query=urlencode(q))
+        url = urlunsplit(parts)
+    return url
+
+
 def get_database_url() -> str:
     """Get database URL in order of precedence:
     1. CLI argument: -x db_url=...
@@ -35,15 +64,8 @@ def get_database_url() -> str:
         or config.get_main_option("sqlalchemy.url")
     )
 
-    # Normalize to async driver
-    if db_url.startswith("postgres://"):
-        db_url = "postgresql+asyncpg://" + db_url[len("postgres://") :]
-    elif db_url.startswith("postgresql://"):
-        db_url = "postgresql+asyncpg://" + db_url[len("postgresql://") :]
-
-    # asyncpg supports sslmode parameter directly, no need to replace
-    # Keep the original sslmode parameter
-
+    # Normalize for asyncpg compatibility
+    db_url = _normalize_asyncpg_url(db_url)
     return db_url
 
 
@@ -86,6 +108,7 @@ def run_migrations_online() -> None:
         database_url,
         poolclass=pool.NullPool,
         pool_pre_ping=True,
+        connect_args={"ssl": "require"},  # safe default for Fly Postgres
     )
 
     async def do_run_migrations(connection):
