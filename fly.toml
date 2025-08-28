@@ -2,20 +2,24 @@
 app = "protectogram-staging"
 primary_region = "cdg"
 
-[env]
-APP_ENV = "staging"
+[build]
+  dockerfile = "Dockerfile"
 
-# HTTP service for web process
+[env]
+  PORT = "8080"
+  APP_ENV = "staging"
+  SCHEDULER_ENABLED = "true"
+
+# HTTP service for web process only
 [[services]]
-protocol = "http"
-internal_port = 8000
+protocol = "tcp"
+internal_port = 8080
 processes = ["web"]
 
 # Port configuration for web service
 [[services.ports]]
 port = 80
 handlers = ["http"]
-force_https = true
 
 [[services.ports]]
 port = 443
@@ -23,34 +27,18 @@ handlers = ["tls", "http"]
 
 # Health checks for web service
 [[services.http_checks]]
-interval = "30s"
-timeout = "10s"
-grace_period = "5s"
+interval = "10s"
+timeout = "2s"
 method = "GET"
 path = "/health/live"
 protocol = "http"
-
-[[services.http_checks]]
-interval = "60s"
-timeout = "10s"
-grace_period = "5s"
-method = "GET"
-path = "/health/ready"
-protocol = "http"
-
-# Metrics endpoint check
-[[services.http_checks]]
-interval = "120s"
-timeout = "10s"
-grace_period = "5s"
-method = "GET"
-path = "/metrics"
-protocol = "http"
+tls_skip_verify = false
+restart_limit = 0
 
 # Process groups
 [processes]
-web = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
-scheduler = "python -m app.scheduler.setup"
+web = "uvicorn app.main:app --host 0.0.0.0 --port 8080"
+scheduler = "python -m app.scheduler.run"
 
 # Web process VM - increased memory for FastAPI + DB connections + metrics
 [[vm]]
@@ -65,3 +53,7 @@ cpu_kind = "shared"
 cpus = 1
 memory_mb = 512
 processes = ["scheduler"]
+
+[deploy]
+  # Run migrations once per deploy in an ephemeral VM
+  release_command = "alembic upgrade head"

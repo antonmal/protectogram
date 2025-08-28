@@ -1,5 +1,6 @@
 """Main FastAPI application factory."""
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -71,10 +72,11 @@ def main() -> None:
     """Main entry point for the application."""
     import uvicorn
 
+    port = int(os.getenv("PORT", "8080"))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",  # nosec B104: binding for local dev only; prod runs behind Fly proxy
-        port=8000,
+        port=port,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )
