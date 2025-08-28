@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.services import TelnyxService
 from app.core.ui_strings import get_tts_string
 from app.domain.panic import generate_idempotency_key
 from app.storage.models import CallAttempt, Incident, MemberLink, User
@@ -19,6 +20,7 @@ logger = get_logger(__name__)
 async def initiate_call_cascade(
     session: AsyncSession,
     incident_id: int,
+    telnyx_service: TelnyxService,
     correlation_id: str | None = None,
 ) -> None:
     """
@@ -75,6 +77,7 @@ async def initiate_call_cascade(
                 incident,
                 watcher_link,
                 ward,
+                telnyx_service,
                 correlation_id,
             )
         )
@@ -96,6 +99,7 @@ async def initiate_call_to_guardian(
     incident: Incident,
     watcher_link: MemberLink,
     ward: User,
+    telnyx_service: TelnyxService,
     correlation_id: str | None = None,
     attempt_no: int = 1,
 ) -> None:
@@ -135,13 +139,31 @@ async def initiate_call_to_guardian(
     )
 
     # Create Telnyx call payload
-    create_call_payload(
+    call_payload = create_call_payload(
         incident,
         watcher,
         ward,
         call_attempt.id,
         idempotency_key,
     )
+
+    # Use the driver to initiate the call (real or simulated)
+    from app.integrations.telnyx.driver import initiate_call
+
+    success = await initiate_call(
+        telnyx_service,
+        call_payload,
+        idempotency_key,
+        correlation_id,
+    )
+
+    if not success:
+        logger.error(
+            "Failed to initiate call",
+            call_attempt_id=call_attempt.id,
+            watcher_id=watcher.id,
+            correlation_id=correlation_id,
+        )
 
     # TODO: Send call to Telnyx (will be implemented in Prompt 6)
     # await send_telnyx_call(call_payload)
@@ -516,11 +538,15 @@ async def handle_call_retry(
     ward = result.scalar_one()
 
     # Initiate retry call
+    from app.core.dependencies import get_telnyx_service
+
+    telnyx_service = get_telnyx_service(session)
     await initiate_call_to_guardian(
         session,
         incident,
         watcher_link,
         ward,
+        telnyx_service,
         correlation_id,
         attempt_no=attempt_no,
     )

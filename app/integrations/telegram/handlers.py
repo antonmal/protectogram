@@ -363,8 +363,11 @@ async def _handle_panic_button(
     )
 
     # Start call cascade
+    from app.core.dependencies import get_telnyx_service
+
+    telnyx_service = get_telnyx_service(telegram_service.session)
     await initiate_call_cascade(
-        telegram_service.session, int(incident_id), correlation_id
+        telegram_service.session, int(incident_id), telnyx_service, correlation_id
     )
 
 

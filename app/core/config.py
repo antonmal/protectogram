@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Telnyx Configuration
     TELNYX_API_KEY: str = Field(default="", description="Telnyx API key")
     TELNYX_CONNECTION_ID: str = Field(default="", description="Telnyx connection ID")
+    TELNYX_WEBHOOK_SECRET: str = Field(default="", description="Telnyx webhook secret")
 
     # Observability
     SENTRY_DSN: str | None = Field(default=None, description="Sentry DSN")
@@ -62,6 +63,13 @@ class Settings(BaseSettings):
 
     # Localization Settings
     DEFAULT_LOCALE: str = Field(default="ru-RU", description="Default locale for users")
+
+    # Call Control Settings
+    CALLS_ENABLED: bool = Field(default=False, description="Enable outbound calls")
+    TELNYX_ENABLED: bool = Field(default=False, description="Enable Telnyx integration")
+    TELNYX_WEBHOOK_TEST_MODE: bool = Field(
+        default=True, description="Enable Telnyx webhook test mode"
+    )
 
     # Call Cascade Defaults
     DEFAULT_RING_TIMEOUT_SEC: int = Field(
