@@ -73,7 +73,7 @@ def main() -> None:
 
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # nosec B104: binding for local dev only; prod runs behind Fly proxy
         port=8000,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),

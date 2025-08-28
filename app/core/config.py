@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=True,
-    )
+    )  # type: ignore[typeddict-unknown-key]
 
 
 # Global settings instance

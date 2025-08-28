@@ -38,6 +38,23 @@ class TelegramService(ABC):
         """Send confirmation message via Telegram."""
         pass
 
+    @abstractmethod
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        """Send message with optional reply markup via Telegram."""
+        pass
+
+    @property
+    @abstractmethod
+    def session(self) -> AsyncSession:
+        """Get the database session."""
+        pass
+
 
 class PanicService(ABC):
     """Panic service interface."""
@@ -74,14 +91,19 @@ class DatabaseTelegramService(TelegramService):
     """Database-backed Telegram service implementation."""
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        self._session = session
+
+    @property
+    def session(self) -> AsyncSession:
+        """Get the database session."""
+        return self._session
 
     async def get_or_create_user(self, telegram_id: str, display_name: str) -> User:
         """Get or create user by Telegram ID."""
         from sqlalchemy import select
 
         # Check if user exists
-        result = await self.session.execute(
+        result = await self._session.execute(
             select(User).where(User.telegram_id == telegram_id)
         )
         user: User | None = result.scalar_one_or_none()
@@ -94,8 +116,8 @@ class DatabaseTelegramService(TelegramService):
             telegram_id=telegram_id,
             display_name=display_name,
         )
-        self.session.add(new_user)
-        await self.session.flush()
+        self._session.add(new_user)
+        await self._session.flush()
 
         return new_user
 
@@ -105,13 +127,13 @@ class DatabaseTelegramService(TelegramService):
         """Store inbox event for deduplication."""
         from app.core.idempotency import store_inbox_event
 
-        return await store_inbox_event(self.session, provider, event_id, payload)
+        return await store_inbox_event(self._session, provider, event_id, payload)
 
     async def is_duplicate_event(self, provider: str, event_id: str) -> bool:
         """Check if event is duplicate."""
         from app.core.idempotency import is_duplicate_inbox_event
 
-        return await is_duplicate_inbox_event(self.session, provider, event_id)
+        return await is_duplicate_inbox_event(self._session, provider, event_id)
 
     async def send_confirmation_message(
         self, chat_id: int, message: str, correlation_id: str | None = None
@@ -119,7 +141,7 @@ class DatabaseTelegramService(TelegramService):
         """Send confirmation message via Telegram."""
         from app.integrations.telegram.outbox import send_confirmation_message
 
-        await send_confirmation_message(self.session, chat_id, message, correlation_id)
+        await send_confirmation_message(self._session, chat_id, message, correlation_id)
 
     async def send_message(
         self,
@@ -132,7 +154,7 @@ class DatabaseTelegramService(TelegramService):
         from app.integrations.telegram.outbox import send_telegram_message
 
         await send_telegram_message(
-            self.session, chat_id, text, reply_markup, correlation_id
+            self._session, chat_id, text, reply_markup, correlation_id
         )
 
 
@@ -140,7 +162,7 @@ class DatabasePanicService(PanicService):
     """Database-backed Panic service implementation."""
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        self._session = session
 
     async def create_panic_incident(
         self, traveler_telegram_id: str, correlation_id: str | None = None
@@ -149,7 +171,7 @@ class DatabasePanicService(PanicService):
         from app.domain.panic import create_panic_incident as domain_create_incident
 
         incident = await domain_create_incident(
-            self.session,
+            self._session,
             traveler_telegram_id,
             correlation_id,
         )
@@ -180,7 +202,7 @@ class DatabasePanicService(PanicService):
         from app.domain.panic import acknowledge_panic as domain_acknowledge
 
         success = await domain_acknowledge(
-            self.session,
+            self._session,
             incident_id,
             acknowledged_by_user_id,
             correlation_id,
@@ -213,7 +235,7 @@ class DatabasePanicService(PanicService):
         from app.domain.panic import cancel_panic as domain_cancel
 
         success = await domain_cancel(
-            self.session,
+            self._session,
             incident_id,
             canceled_by_user_id,
             correlation_id,
@@ -376,11 +398,11 @@ class DatabaseTelnyxService(TelnyxService):
     """Database-backed Telnyx service implementation."""
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        self._session = session
 
     def get_session(self) -> AsyncSession:
         """Get the database session."""
-        return self.session
+        return self._session
 
     async def store_inbox_event(
         self, provider: str, event_id: str, payload: dict[str, Any]
@@ -388,13 +410,13 @@ class DatabaseTelnyxService(TelnyxService):
         """Store inbox event for deduplication."""
         from app.core.idempotency import store_inbox_event
 
-        return await store_inbox_event(self.session, provider, event_id, payload)
+        return await store_inbox_event(self._session, provider, event_id, payload)
 
     async def is_duplicate_event(self, provider: str, event_id: str) -> bool:
         """Check if event is duplicate."""
         from app.core.idempotency import is_duplicate_inbox_event
 
-        return await is_duplicate_inbox_event(self.session, provider, event_id)
+        return await is_duplicate_inbox_event(self._session, provider, event_id)
 
     async def process_telnyx_event(
         self, event_data: dict[str, Any], correlation_id: str | None = None
@@ -416,15 +438,15 @@ class DatabaseTelnyxService(TelnyxService):
             attempt_no=attempt_no,
             started_at=datetime.now(UTC),
         )
-        self.session.add(call_attempt)
-        await self.session.flush()
+        self._session.add(call_attempt)
+        await self._session.flush()
         return call_attempt
 
     async def update_call_attempt(self, call_attempt_id: int, **kwargs: Any) -> None:
         """Update call attempt record."""
         from sqlalchemy import select
 
-        result = await self.session.execute(
+        result = await self._session.execute(
             select(CallAttempt).where(CallAttempt.id == call_attempt_id)
         )
         call_attempt = result.scalar_one_or_none()
@@ -434,7 +456,7 @@ class DatabaseTelnyxService(TelnyxService):
                 if hasattr(call_attempt, key):
                     setattr(call_attempt, key, value)
 
-            await self.session.flush()
+            await self._session.flush()
 
             logger.info(
                 "Call attempt updated",
