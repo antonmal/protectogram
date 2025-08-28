@@ -29,16 +29,19 @@ def get_database_url() -> str:
     """
     # Check CLI argument first
     cli_args = context.get_x_argument(as_dictionary=True)
-    if cli_args.get("db_url"):
-        return cli_args["db_url"]
+    db_url = (
+        cli_args.get("db_url")
+        or os.environ.get("ALEMBIC_DATABASE_URL")
+        or config.get_main_option("sqlalchemy.url")
+    )
 
-    # Check environment variable
-    env_url = os.environ.get("ALEMBIC_DATABASE_URL")
-    if env_url:
-        return env_url
+    # Normalize to async driver
+    if db_url.startswith("postgres://"):
+        db_url = "postgresql+asyncpg://" + db_url[len("postgres://") :]
+    elif db_url.startswith("postgresql://"):
+        db_url = "postgresql+asyncpg://" + db_url[len("postgresql://") :]
 
-    # Fallback to config file (not recommended for tests)
-    return config.get_main_option("sqlalchemy.url")
+    return db_url
 
 
 def run_migrations_offline() -> None:
@@ -72,20 +75,14 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Get the database URL
+    # Get the database URL (already normalized)
     database_url = get_database_url()
 
     # Create async engine for SQLAlchemy 2.x
-    if database_url.startswith("postgresql://"):
-        # Convert to async URL
-        async_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
-    else:
-        async_url = database_url
-
-    # Create async engine
     connectable = create_async_engine(
-        async_url,
+        database_url,
         poolclass=pool.NullPool,
+        pool_pre_ping=True,
     )
 
     async def do_run_migrations(connection):
