@@ -38,6 +38,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY app/ ./app/
 COPY migrations/ ./migrations/
 COPY scripts/ ./scripts/
+COPY alembic.ini ./
 
 # Create necessary directories
 RUN mkdir -p /app/logs && chown -R protectogram:protectogram /app
