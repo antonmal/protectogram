@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Scheduler Control
     SCHEDULER_ENABLED: bool = Field(default=True, description="Enable APScheduler")
 
+    # Database Control
+    ENABLE_DB: bool = Field(default=True, description="Enable database connections")
+
     # Call Cascade Defaults
     DEFAULT_RING_TIMEOUT_SEC: int = Field(
         default=25, description="Default ring timeout"

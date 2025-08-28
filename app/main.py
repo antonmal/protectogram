@@ -18,7 +18,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     # Startup
     setup_logging()
-    await setup_scheduler()
+
+    # Conditional database and scheduler setup
+    if settings.ENABLE_DB:
+        from app.core.database import init_db
+
+        await init_db()
+
+    if settings.SCHEDULER_ENABLED:
+        await setup_scheduler()
+
     yield
     # Shutdown
     # Cleanup will be handled by FastAPI

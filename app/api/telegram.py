@@ -1,14 +1,9 @@
 """Telegram webhook endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.core.database import get_db
-from app.core.idempotency import (
-    generate_correlation_id,
-    is_duplicate_inbox_event,
-    store_inbox_event,
-)
+from app.core.dependencies import TelegramServiceDep
+from app.core.idempotency import generate_correlation_id
 from app.core.logging import get_logger, log_with_context
 from app.integrations.telegram.handlers import handle_telegram_update
 
@@ -20,8 +15,8 @@ logger = get_logger(__name__)
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
+    telegram_service: TelegramServiceDep,
     secret: str = Query(..., description="Webhook secret for validation"),
-    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Handle Telegram webhook with secret validation and idempotency."""
     from app.core.config import settings
@@ -50,17 +45,18 @@ async def telegram_webhook(
         logger.error("Missing update_id in Telegram update")
         raise HTTPException(status_code=400, detail="Missing update_id")
 
-    # Check for duplicate event
-    if await is_duplicate_inbox_event(db, "telegram", update_id):
-        logger.info("Duplicate Telegram update ignored", update_id=update_id)
-        return {"status": "ok", "message": "Duplicate update ignored"}
-
     try:
-        # Store inbox event for idempotency
-        await store_inbox_event(db, "telegram", update_id, update_data)
+        # Process the update (deduplication is handled inside)
+        processed = await handle_telegram_update(
+            update_data, telegram_service, correlation_id
+        )
 
-        # Process the update
-        await handle_telegram_update(update_data, db, correlation_id)
+        if not processed:
+            logger.info(
+                "Telegram update was duplicate, skipping processing",
+                update_id=update_id,
+            )
+            return {"status": "ok", "message": "Duplicate update ignored"}
 
         logger.info("Telegram webhook processed successfully", update_id=update_id)
         return {"status": "ok", "message": "Update processed"}

@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.metrics import panic_acknowledged, panic_canceled, panic_incidents_started
-from app.integrations.telegram.outbox import send_telegram_alert
+
+# from app.integrations.telegram.outbox import send_telegram_alert  # Will be implemented in Prompt 6
 from app.integrations.telnyx.call_control import initiate_call_cascade
 from app.scheduler.setup import cancel_incident_jobs, schedule_action
 from app.storage.models import Alert, Incident, MemberLink, User
@@ -113,14 +114,14 @@ async def start_panic_cascade(
             session.add(alert)
             await session.flush()
 
-            # Send Telegram alert
-            await send_telegram_alert(
-                session,
-                alert.id,
-                watcher_link.watcher_user_id,
-                incident.traveler_user_id,
-                correlation_id,
-            )
+            # Send Telegram alert (will be implemented in Prompt 6)
+            # await send_telegram_alert(
+            #     session,
+            #     alert.id,
+            #     watcher_link.watcher_user_id,
+            #     incident.traveler_user_id,
+            #     correlation_id,
+            # )
 
         # Call alert
         if watcher_link.calls_enabled:
@@ -259,15 +260,17 @@ async def send_panic_reminder(
 
     for watcher_link in watchers:
         if watcher_link.telegram_enabled:
-            await send_telegram_alert(
-                session,
-                None,  # No specific alert ID for reminders
-                watcher_link.watcher_user_id,
-                incident.traveler_user_id,
-                None,
-                is_reminder=True,
-                reminder_count=reminder_count,
-            )
+            # Send Telegram alert (will be implemented in Prompt 6)
+            # await send_telegram_alert(
+            #     session,
+            #     None,  # No specific alert ID for reminders
+            #     watcher_link.watcher_user_id,
+            #     incident.traveler_user_id,
+            #     None,
+            #     is_reminder=True,
+            #     reminder_count=reminder_count,
+            # )
+            pass  # Placeholder for Prompt 6 implementation
 
     # Schedule next reminder if needed
     if reminder_count < 5:  # Max 5 reminders
