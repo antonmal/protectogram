@@ -20,10 +20,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
 
     # Conditional database and scheduler setup
-    if settings.ENABLE_DB:
-        from app.core.database import init_db
-
-        await init_db()
+    # Temporarily disable database for deployment
+    # if settings.ENABLE_DB:
+    #     from app.core.database import init_db
+    #     await init_db()
 
     # Temporarily disable scheduler for deployment
     # if settings.SCHEDULER_ENABLED:
