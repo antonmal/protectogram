@@ -15,32 +15,33 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 
-def _normalize_asyncpg_url(url: str) -> str:
-    """Normalize database URL for asyncpg compatibility."""
-    # ensure async driver
-    if url.startswith("postgres://"):
-        url = "postgresql+asyncpg://" + url[len("postgres://") :]
-    elif url.startswith("postgresql://"):
-        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+def normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
+    """
+    Returns (url, connect_args) suitable for asyncpg.
+    - Converts postgres:// → postgresql+asyncpg://
+    - Sets ssl=disable for Fly internal hosts (*.internal or fdaa:)
+    - Sets ssl=require otherwise
+    """
+    # driver
+    if raw.startswith("postgres://"):
+        raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
+    elif raw.startswith("postgresql://"):
+        raw = "postgresql+asyncpg://" + raw[len("postgresql://") :]
 
-    # rewrite sslmode -> ssl
-    parts = urlsplit(url)
+    parts = urlsplit(raw)
+    host = parts.hostname or ""
     q = dict(parse_qsl(parts.query, keep_blank_values=True))
-    if "sslmode" in q:
-        # map libpq-style values to asyncpg 'ssl' values
-        m = {
-            "disable": "disable",
-            "prefer": "prefer",
-            "allow": "allow",
-            "require": "require",
-            "verify-ca": "verify-ca",
-            "verify-full": "verify-full",
-        }
-        q["ssl"] = m.get(q["sslmode"], "require")
-        del q["sslmode"]
-        parts = parts._replace(query=urlencode(q))
-        url = urlunsplit(parts)
-    return url
+
+    is_internal = host.endswith(".internal") or host.startswith("fdaa:")
+    if is_internal:
+        q["ssl"] = "disable"
+        connect_args = {}  # no SSL for internal
+    else:
+        q["ssl"] = "require"
+        connect_args = {"ssl": "require"}  # asyncpg accepts this
+
+    raw = urlunsplit(parts._replace(query=urlencode(q)))
+    return raw, connect_args
 
 
 # Lazy engine creation
@@ -52,13 +53,13 @@ def get_engine() -> AsyncEngine:
     """Get or create the async engine."""
     global _engine
     if _engine is None:
-        normalized_url = _normalize_asyncpg_url(settings.POSTGRES_URL)
+        db_url, connect_args = normalize_asyncpg_url(settings.POSTGRES_URL)
         _engine = create_async_engine(
-            normalized_url,
+            db_url,
             echo=settings.DEBUG,
             poolclass=NullPool,  # Use NullPool for serverless environments
             future=True,
-            connect_args={"ssl": "require"},  # safe default for Fly Postgres
+            connect_args=connect_args,
         )
     return _engine
 

@@ -22,32 +22,33 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def _normalize_asyncpg_url(url: str) -> str:
-    """Normalize database URL for asyncpg compatibility."""
-    # ensure async driver
-    if url.startswith("postgres://"):
-        url = "postgresql+asyncpg://" + url[len("postgres://") :]
-    elif url.startswith("postgresql://"):
-        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+def normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
+    """
+    Returns (url, connect_args) suitable for asyncpg.
+    - Converts postgres:// → postgresql+asyncpg://
+    - Sets ssl=disable for Fly internal hosts (*.internal or fdaa:)
+    - Sets ssl=require otherwise
+    """
+    # driver
+    if raw.startswith("postgres://"):
+        raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
+    elif raw.startswith("postgresql://"):
+        raw = "postgresql+asyncpg://" + raw[len("postgresql://") :]
 
-    # rewrite sslmode -> ssl
-    parts = urlsplit(url)
+    parts = urlsplit(raw)
+    host = parts.hostname or ""
     q = dict(parse_qsl(parts.query, keep_blank_values=True))
-    if "sslmode" in q:
-        # map libpq-style values to asyncpg 'ssl' values
-        m = {
-            "disable": "disable",
-            "prefer": "prefer",
-            "allow": "allow",
-            "require": "require",
-            "verify-ca": "verify-ca",
-            "verify-full": "verify-full",
-        }
-        q["ssl"] = m.get(q["sslmode"], "require")
-        del q["sslmode"]
-        parts = parts._replace(query=urlencode(q))
-        url = urlunsplit(parts)
-    return url
+
+    is_internal = host.endswith(".internal") or host.startswith("fdaa:")
+    if is_internal:
+        q["ssl"] = "disable"
+        connect_args = {}  # no SSL for internal
+    else:
+        q["ssl"] = "require"
+        connect_args = {"ssl": "require"}  # asyncpg accepts this
+
+    raw = urlunsplit(parts._replace(query=urlencode(q)))
+    return raw, connect_args
 
 
 def get_database_url() -> str:
@@ -63,9 +64,6 @@ def get_database_url() -> str:
         or os.environ.get("ALEMBIC_DATABASE_URL")
         or config.get_main_option("sqlalchemy.url")
     )
-
-    # Normalize for asyncpg compatibility
-    db_url = _normalize_asyncpg_url(db_url)
     return db_url
 
 
@@ -100,15 +98,16 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Get the database URL (already normalized)
+    # Get the database URL and normalize for asyncpg
     database_url = get_database_url()
+    db_url, connect_args = normalize_asyncpg_url(database_url)
 
     # Create async engine for SQLAlchemy 2.x
     connectable = create_async_engine(
-        database_url,
+        db_url,
         poolclass=pool.NullPool,
         pool_pre_ping=True,
-        connect_args={"ssl": "require"},  # safe default for Fly Postgres
+        connect_args=connect_args,
     )
 
     async def do_run_migrations(connection):
