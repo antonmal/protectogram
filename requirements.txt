@@ -15,6 +15,7 @@ pynacl
 python-dotenv
 prometheus-client
 structlog
+testcontainers[postgresql]
 
 pytest
 pytest-asyncio

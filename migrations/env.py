@@ -1,15 +1,10 @@
 """Alembic environment configuration."""
 
-import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from app.core.settings import settings
-from app.storage.base import Base
+from sqlalchemy import create_engine
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -20,10 +15,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-target_metadata = Base.metadata
-
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -31,10 +22,25 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Get database URL from settings."""
-    if not settings.database_url:
-        raise ValueError("DATABASE_URL not set")
-    return settings.database_url
+    """Get database URL from environment variables.
+
+    Alembic will use ALEMBIC_DATABASE_URL if set, otherwise APP_DATABASE_URL_SYNC.
+    If neither is set, raises RuntimeError with a clear message.
+    """
+    # Check for Alembic override first
+    alembic_url = os.environ.get("ALEMBIC_DATABASE_URL")
+    if alembic_url:
+        return alembic_url
+
+    # Fall back to sync URL
+    sync_url = os.environ.get("APP_DATABASE_URL_SYNC")
+    if sync_url:
+        return sync_url
+
+    raise RuntimeError(
+        "No database URL found. Set either ALEMBIC_DATABASE_URL or APP_DATABASE_URL_SYNC "
+        "environment variable."
+    )
 
 
 def run_migrations_offline() -> None:
@@ -52,7 +58,7 @@ def run_migrations_offline() -> None:
     url = get_url()
     context.configure(
         url=url,
-        target_metadata=target_metadata,
+        target_metadata=None,  # Will be set in run_migrations_online
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -61,36 +67,33 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection: Connection) -> None:
-    """Run migrations."""
-    context.configure(connection=connection, target_metadata=target_metadata)
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode.
 
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
+    In this scenario we need to create an Engine
     and associate a connection with the context.
 
     """
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_url()
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Import here to avoid import-time database connections
+    from app.storage import models  # noqa: F401 (ensure mappers are imported)
+    from app.storage.base import Base
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    target_metadata = Base.metadata
 
-    await connectable.dispose()
+    url = get_url()
+    engine = create_engine(url, future=True, pool_pre_ping=True)
 
+    with engine.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            render_as_batch=False,
+            dialect_opts={"paramstyle": "named"},
+        )
 
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
-    asyncio.run(run_async_migrations())
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 if context.is_offline_mode():

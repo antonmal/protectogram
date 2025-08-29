@@ -2,26 +2,20 @@
 
 from fastapi import APIRouter, Response
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter()
 
 
-@router.get("/live")
-async def health_live() -> dict[str, str]:
-    """Liveness probe endpoint.
-
-    Returns:
-        dict: Status indicating the service is alive
-    """
+@router.get("/health/live")
+def health_live() -> dict[str, str]:
+    """Health check endpoint for liveness probe."""
     return {"status": "live"}
 
 
-@router.get("/ready")
-async def health_ready() -> dict[str, str]:
-    """Readiness probe endpoint.
-
-    Returns:
-        dict: Status indicating the service is not ready (stub implementation)
-    """
+@router.get("/health/ready")
+def health_ready() -> Response:
+    """Health check endpoint for readiness probe."""
     return Response(
-        content='{"status": "not_ready"}', media_type="application/json", status_code=503
+        content='{"status": "not_ready"}',
+        media_type="application/json",
+        status_code=503,
     )

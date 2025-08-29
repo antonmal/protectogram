@@ -169,3 +169,65 @@ Optional:
 ## License
 
 MIT License - see LICENSE file for details.
+
+## Database & Migrations
+
+### Database URLs
+
+The application uses different database URLs for different purposes:
+
+- **Web ORM (async)**: `APP_DATABASE_URL` - Uses `postgresql+asyncpg://` for FastAPI async operations
+- **Alembic & APScheduler (sync)**: `APP_DATABASE_URL_SYNC` - Uses `postgresql+psycopg://` for migrations and job store
+- **Alembic override**: `ALEMBIC_DATABASE_URL` - If set, Alembic uses this instead of `APP_DATABASE_URL_SYNC`
+
+### Environment Variables
+
+```bash
+# Required for web app
+APP_DATABASE_URL=postgresql+asyncpg://user:pass@localhost/dbname
+
+# Required for migrations and APScheduler
+APP_DATABASE_URL_SYNC=postgresql+psycopg://user:pass@localhost/dbname
+
+# Optional Alembic override
+ALEMBIC_DATABASE_URL=postgresql+psycopg://user:pass@localhost/dbname
+```
+
+### Local Development
+
+For local development without a local PostgreSQL installation:
+
+1. **Integration tests** use Docker via Testcontainers (PostgreSQL 16)
+2. **If Docker is unavailable**, integration tests are skipped with a clear message
+3. **Migrations** can be tested using the integration test suite
+
+### Migration Commands
+
+```bash
+# Apply all migrations
+make migrate-up
+
+# Rollback last migration
+make migrate-down
+
+# Create new migration
+make migrate-revision name=add_new_table
+
+# Test migrations (requires Docker)
+make test-integration
+```
+
+### Schema
+
+The database schema includes:
+
+- **users**: User accounts with Telegram integration
+- **member_links**: Links between watchers and travelers
+- **incidents**: Incident tracking
+- **alerts**: Alert notifications
+- **call_attempts**: Phone call attempt tracking
+- **inbox_events**: Incoming webhook events
+- **outbox_messages**: Outgoing messages
+- **scheduled_actions**: Scheduled tasks
+
+All tables use `BIGSERIAL` primary keys and `TIMESTAMPTZ` timestamps with `now()` defaults.

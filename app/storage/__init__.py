@@ -1,6 +1,27 @@
 """Database storage layer."""
 
-from .base import Base, get_session, init_database
-from .models import Incident
+from .base import Base
+from .models import (
+    Alert,
+    CallAttempt,
+    InboxEvent,
+    Incident,
+    MemberLink,
+    OutboxMessage,
+    ScheduledAction,
+    User,
+)
+from .session import get_session
 
-__all__ = ["Base", "init_database", "get_session", "Incident"]
+__all__ = [
+    "Base",
+    "get_session",
+    "User",
+    "MemberLink",
+    "Incident",
+    "Alert",
+    "CallAttempt",
+    "InboxEvent",
+    "OutboxMessage",
+    "ScheduledAction",
+]

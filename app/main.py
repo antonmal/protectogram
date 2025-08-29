@@ -14,7 +14,6 @@ from app.api import (
     telnyx_router,
 )
 from app.core import install_middlewares, settings, setup_logging
-from app.storage import init_database
 
 
 @asynccontextmanager
@@ -44,9 +43,6 @@ def create_app() -> FastAPI:
 
     # Install middlewares in correct order
     install_middlewares(app)
-
-    # Initialize database
-    init_database()
 
     # Mount Prometheus metrics
     metrics_app = make_asgi_app()

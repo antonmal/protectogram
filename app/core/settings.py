@@ -17,8 +17,15 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", description="Application environment")
     log_level: str = Field(default="INFO", description="Logging level")
 
-    # Database
-    database_url: str | None = Field(default=None, description="Database connection URL")
+    # Database URLs
+    # Runtime (web app / async ORM)
+    database_url: str | None = Field(default=None, description="Async database connection URL")
+    # Sync consumers (Alembic + APScheduler jobstore)
+    database_url_sync: str | None = Field(default=None, description="Sync database connection URL")
+    # Alembic override (optional)
+    alembic_database_url: str | None = Field(
+        default=None, description="Alembic database URL override"
+    )
 
     # Telegram
     telegram_bot_token: str | None = Field(default=None, description="Telegram bot token")
