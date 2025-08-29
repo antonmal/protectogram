@@ -5,7 +5,10 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from app.core.dependencies import TelnyxServiceDep
 from app.core.idempotency import generate_correlation_id
 from app.core.logging import get_logger, log_with_context
-from app.integrations.telnyx.webhook import verify_webhook_signature, extract_webhook_data
+from app.integrations.telnyx.webhook import (
+    extract_webhook_data,
+    verify_webhook_signature,
+)
 
 router = APIRouter()
 
@@ -20,7 +23,6 @@ async def telnyx_webhook(
     telnyx_timestamp: str = Header(None, alias="Telnyx-Timestamp"),
 ) -> dict[str, str]:
     """Handle Telnyx webhook with signature verification and idempotency."""
-    from app.core.config import settings
 
     # Read request body
     body = await request.body()
@@ -30,10 +32,7 @@ async def telnyx_webhook(
 
     # Verify signature using new module with test mode support
     if not verify_webhook_signature(
-        body, 
-        telnyx_signature_ed25519 or "", 
-        telnyx_timestamp or "",
-        headers
+        body, telnyx_signature_ed25519 or "", telnyx_timestamp or "", headers
     ):
         logger.warning("Invalid Telnyx webhook signature")
         raise HTTPException(status_code=403, detail="Invalid signature")
@@ -74,10 +73,10 @@ async def telnyx_webhook(
         await telnyx_service.process_telnyx_event(event_data, correlation_id)
 
         logger.info(
-            "Telnyx webhook processed successfully", 
+            "Telnyx webhook processed successfully",
             event_id=event_id,
             event_type=webhook_data["event_type"],
-            is_simulated=webhook_data["is_simulated"]
+            is_simulated=webhook_data["is_simulated"],
         )
         return {"status": "ok", "message": "Event processed"}
 

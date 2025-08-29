@@ -49,10 +49,14 @@ def upgrade() -> None:
     )
 
     # Create incident_status enum
-    op.execute("CREATE TYPE incident_status AS ENUM ('active', 'acknowledged', 'canceled', 'exhausted')")
+    op.execute(
+        "CREATE TYPE incident_status AS ENUM ('active', 'acknowledged', 'canceled', 'exhausted')"
+    )
 
     # Alter incidents.status to use the enum
-    op.execute("ALTER TABLE incidents ALTER COLUMN status TYPE incident_status USING status::incident_status")
+    op.execute(
+        "ALTER TABLE incidents ALTER COLUMN status TYPE incident_status USING status::incident_status"
+    )
 
     # Add UNIQUE constraint: only one active incident per ward
     op.execute(

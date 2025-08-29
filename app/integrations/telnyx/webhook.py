@@ -34,9 +34,9 @@ def verify_webhook_signature(
         test_mode=settings.TELNYX_WEBHOOK_TEST_MODE,
         x_simulated=headers.get("X-Simulated"),
         x_simulated_lower=headers.get("x-simulated"),
-        all_headers=list(headers.keys())
+        all_headers=list(headers.keys()),
     )
-    
+
     if settings.TELNYX_WEBHOOK_TEST_MODE:
         # In test mode, accept requests with X-Simulated header (case insensitive)
         if headers.get("X-Simulated") == "1" or headers.get("x-simulated") == "1":
