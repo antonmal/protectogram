@@ -297,7 +297,7 @@ async def trigger_panic_test(session: AsyncSession) -> str:
     )
 
     # Create test incident
-    incident = await create_panic_incident(session, test_user.telegram_id)
+    incident = await create_panic_incident(session, test_user.id)
 
     if incident:
         # TODO: Start cascade (will be implemented in Prompt 6)

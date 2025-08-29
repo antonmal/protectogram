@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "003"
-down_revision = "002"
+down_revision = "eda39af885f1"
 branch_labels = None
 depends_on = None
 
@@ -27,48 +27,18 @@ def upgrade() -> None:
         ),
     )
 
-    # Add created_at to member_links table (for priority ordering)
-    op.add_column(
-        "member_links",
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-    )
-
     # Add amd_result to call_attempts table
     op.add_column(
         "call_attempts", sa.Column("amd_result", sa.String(50), nullable=True)
     )
 
-    # Create incidents table
-    op.create_table(
+    # Add new columns to existing incidents table
+    op.add_column(
         "incidents",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("traveler_user_id", sa.Integer(), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum(
-                "active",
-                "acknowledged",
-                "canceled",
-                "exhausted",
-                name="incident_status",
-            ),
-            nullable=False,
-        ),
-        sa.Column("acknowledged_by_user_id", sa.Integer(), nullable=True),
-        sa.Column("ack_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("canceled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("exhausted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
+    )
+    op.add_column(
+        "incidents",
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -76,23 +46,17 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             onupdate=sa.func.now(),
         ),
-        sa.ForeignKeyConstraint(
-            ["traveler_user_id"],
-            ["users.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["acknowledged_by_user_id"],
-            ["users.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
     )
 
+    # Create incident_status enum
+    op.execute("CREATE TYPE incident_status AS ENUM ('active', 'acknowledged', 'canceled', 'exhausted')")
+
+    # Alter incidents.status to use the enum
+    op.execute("ALTER TABLE incidents ALTER COLUMN status TYPE incident_status USING status::incident_status")
+
     # Add UNIQUE constraint: only one active incident per ward
-    op.create_unique_constraint(
-        "uq_incidents_active_per_ward",
-        "incidents",
-        ["traveler_user_id"],
-        postgresql_where=sa.text("status = 'active'"),
+    op.execute(
+        "CREATE UNIQUE INDEX uq_incidents_active_per_ward ON incidents (traveler_user_id) WHERE status = 'active'"
     )
 
     # Create indexes for performance
@@ -112,15 +76,18 @@ def downgrade() -> None:
     op.drop_index("ix_incidents_traveler_user_id", table_name="incidents")
 
     # Drop UNIQUE constraint
-    op.drop_constraint("uq_incidents_active_per_ward", "incidents", type_="unique")
+    op.execute("DROP INDEX IF EXISTS uq_incidents_active_per_ward")
 
-    # Drop incidents table
-    op.drop_table("incidents")
+    # Drop columns from incidents table
+    op.drop_column("incidents", "exhausted_at")
+    op.drop_column("incidents", "updated_at")
+
+    # Revert incidents.status back to string
+    op.execute("ALTER TABLE incidents ALTER COLUMN status TYPE VARCHAR(20)")
 
     # Drop incident_status enum
     op.execute("DROP TYPE incident_status")
 
     # Drop columns
     op.drop_column("call_attempts", "amd_result")
-    op.drop_column("member_links", "created_at")
     op.drop_column("users", "preferred_locale")

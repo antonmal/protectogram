@@ -24,23 +24,17 @@ def upgrade() -> None:
         "ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
     )
 
-    # UserSettings table
+    # MemberLinks table
     op.execute(
-        "ALTER TABLE user_settings ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
+        "ALTER TABLE member_links ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
     )
     op.execute(
-        "ALTER TABLE user_settings ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE"
+        "ALTER TABLE member_links ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE"
     )
 
     # Incidents table
     op.execute(
         "ALTER TABLE incidents ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
-    )
-    op.execute(
-        "ALTER TABLE incidents ALTER COLUMN ack_at TYPE TIMESTAMP WITH TIME ZONE"
-    )
-    op.execute(
-        "ALTER TABLE incidents ALTER COLUMN canceled_at TYPE TIMESTAMP WITH TIME ZONE"
     )
 
     # Alerts table
@@ -71,17 +65,6 @@ def upgrade() -> None:
     op.execute(
         "ALTER TABLE scheduled_actions ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
     )
-    op.execute(
-        "ALTER TABLE scheduled_actions ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE"
-    )
-
-    # CallAttempts table
-    op.execute(
-        "ALTER TABLE call_attempts ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE"
-    )
-    op.execute(
-        "ALTER TABLE call_attempts ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE"
-    )
 
 
 def downgrade() -> None:
@@ -91,23 +74,17 @@ def downgrade() -> None:
         "ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE"
     )
 
-    # UserSettings table
+    # MemberLinks table
     op.execute(
-        "ALTER TABLE user_settings ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE"
+        "ALTER TABLE member_links ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE"
     )
     op.execute(
-        "ALTER TABLE user_settings ALTER COLUMN updated_at TYPE TIMESTAMP WITHOUT TIME ZONE"
+        "ALTER TABLE member_links ALTER COLUMN updated_at TYPE TIMESTAMP WITHOUT TIME ZONE"
     )
 
     # Incidents table
     op.execute(
         "ALTER TABLE incidents ALTER COLUMN created_at TYPE TIMESTAMP WITHOUT TIME ZONE"
-    )
-    op.execute(
-        "ALTER TABLE incidents ALTER COLUMN ack_at TYPE TIMESTAMP WITHOUT TIME ZONE"
-    )
-    op.execute(
-        "ALTER TABLE incidents ALTER COLUMN canceled_at TYPE TIMESTAMP WITHOUT TIME ZONE"
     )
 
     # Alerts table

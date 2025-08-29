@@ -1,39 +1,23 @@
 """Telnyx webhook endpoint."""
 
-import hashlib
-import hmac
-
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.core.dependencies import TelnyxServiceDep
 from app.core.idempotency import generate_correlation_id
 from app.core.logging import get_logger, log_with_context
+from app.integrations.telnyx.webhook import verify_webhook_signature, extract_webhook_data
 
 router = APIRouter()
 
 logger = get_logger(__name__)
 
 
-def verify_telnyx_signature(
-    payload: bytes,
-    signature: str,
-    webhook_secret: str,
-) -> bool:
-    """Verify Telnyx webhook signature."""
-    expected_signature = hmac.new(
-        webhook_secret.encode(),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(signature, expected_signature)
-
-
 @router.post("/webhook")
 async def telnyx_webhook(
     request: Request,
     telnyx_service: TelnyxServiceDep,
-    telnyx_signature_ed25519: str = Header(..., alias="Telnyx-Signature-Ed25519"),
+    telnyx_signature_ed25519: str = Header(None, alias="Telnyx-Signature-Ed25519"),
+    telnyx_timestamp: str = Header(None, alias="Telnyx-Timestamp"),
 ) -> dict[str, str]:
     """Handle Telnyx webhook with signature verification and idempotency."""
     from app.core.config import settings
@@ -41,26 +25,38 @@ async def telnyx_webhook(
     # Read request body
     body = await request.body()
 
-    # Verify signature
-    if not verify_telnyx_signature(
-        body, telnyx_signature_ed25519, settings.TELNYX_API_KEY
+    # Get all headers for verification
+    headers = dict(request.headers)
+
+    # Verify signature using new module with test mode support
+    if not verify_webhook_signature(
+        body, 
+        telnyx_signature_ed25519 or "", 
+        telnyx_timestamp or "",
+        headers
     ):
-        get_logger(__name__).warning("Invalid Telnyx signature")
+        logger.warning("Invalid Telnyx webhook signature")
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     # Parse JSON payload
     try:
         event_data = await request.json()
     except Exception as e:
-        get_logger(__name__).error("Failed to parse Telnyx webhook body", error=str(e))
+        logger.error("Failed to parse Telnyx webhook body", error=str(e))
         raise HTTPException(status_code=400, detail="Invalid JSON body") from e
+
+    # Extract and validate webhook data
+    webhook_data = extract_webhook_data(event_data, headers)
+    if not webhook_data:
+        logger.error("Invalid webhook data")
+        raise HTTPException(status_code=400, detail="Invalid webhook data")
 
     # Generate correlation ID for tracing
     correlation_id = generate_correlation_id()
     logger = log_with_context(get_logger(__name__), correlation_id=correlation_id)
 
     # Extract event ID for idempotency
-    event_id = event_data.get("data", {}).get("id", "")
+    event_id = webhook_data["event_id"]
     if not event_id:
         logger.error("Missing event ID in Telnyx webhook")
         raise HTTPException(status_code=400, detail="Missing event ID")
@@ -77,7 +73,12 @@ async def telnyx_webhook(
         # Process the event
         await telnyx_service.process_telnyx_event(event_data, correlation_id)
 
-        logger.info("Telnyx webhook processed successfully", event_id=event_id)
+        logger.info(
+            "Telnyx webhook processed successfully", 
+            event_id=event_id,
+            event_type=webhook_data["event_type"],
+            is_simulated=webhook_data["is_simulated"]
+        )
         return {"status": "ok", "message": "Event processed"}
 
     except Exception as e:

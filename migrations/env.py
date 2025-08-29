@@ -143,7 +143,7 @@ def run_migrations_online() -> None:
         connect_args=connect_args,
     )
 
-    async def do_run_migrations(connection):
+    def do_run_migrations(connection):
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

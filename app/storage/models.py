@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -94,8 +95,10 @@ class Incident(Base):
     id = Column(Integer, primary_key=True)
     traveler_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(
-        String(20), default="active", nullable=False
-    )  # active, acknowledged, canceled, exhausted
+        Enum("active", "acknowledged", "canceled", "exhausted", name="incident_status"),
+        default="active",
+        nullable=False,
+    )
     acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     ack_at = Column(DateTime(timezone=True), nullable=True)
     canceled_at = Column(DateTime(timezone=True), nullable=True)

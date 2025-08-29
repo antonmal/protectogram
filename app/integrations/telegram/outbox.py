@@ -31,7 +31,13 @@ async def send_confirmation_message(
         "parse_mode": "HTML",
     }
 
-    # Generate idempotency key
+    # Generate idempotency key with correlation_id to ensure uniqueness
+    if correlation_id:
+        payload["_correlation_id"] = correlation_id
+    else:
+        from app.core.idempotency import generate_correlation_id
+        payload["_correlation_id"] = generate_correlation_id()
+    
     idempotency_key = generate_idempotency_key(payload)
 
     # Check for duplicate
@@ -119,7 +125,13 @@ async def send_telegram_message(
     if reply_markup:
         payload["reply_markup"] = reply_markup
 
-    # Generate idempotency key
+    # Generate idempotency key with correlation_id to ensure uniqueness
+    if correlation_id:
+        payload["_correlation_id"] = correlation_id
+    else:
+        from app.core.idempotency import generate_correlation_id
+        payload["_correlation_id"] = generate_correlation_id()
+    
     idempotency_key = generate_idempotency_key(payload)
 
     # Check for duplicate

@@ -104,6 +104,16 @@ async def _handle_message(
         await _handle_start_command(chat_id, user, telegram_service, correlation_id)
         return
 
+    # Handle /panic command
+    if text == "/panic":
+        await _handle_panic_button(chat_id, user, telegram_service, correlation_id)
+        return
+
+    # Handle /cancel command
+    if text == "/cancel":
+        await _handle_cancel_command(chat_id, user, telegram_service, correlation_id)
+        return
+
     # Handle deep link invitations
     if text.startswith("/start "):
         invite_token = text.split(" ", 1)[1]
@@ -397,6 +407,55 @@ async def _handle_main_menu_button(
         chat_id, welcome_msg["text"], welcome_msg["reply_markup"]
     )
     menu_manager.update_menu_state(chat_id, current_menu="main")
+
+
+async def _handle_cancel_command(
+    chat_id: int,
+    user: Any,
+    telegram_service: TelegramService,
+    correlation_id: str | None = None,
+) -> None:
+    """Handle /cancel command."""
+    # Check for existing active incident
+    existing_incident = await get_active_incident_for_user(
+        telegram_service.session, user.id
+    )
+
+    if not existing_incident:
+        # No active incident to cancel
+        error_msg = create_error_message("no_active_incident")
+        await telegram_service.send_confirmation_message(chat_id, error_msg)
+        return
+
+    # Cancel the incident
+    from app.core.dependencies import get_panic_service
+
+    panic_service = get_panic_service(telegram_service.session)
+
+    success = await panic_service.cancel_panic(
+        existing_incident.id,
+        user.id,
+        correlation_id,
+    )
+
+    if success:
+        # Send confirmation
+        confirmation_msg = create_confirmation_message("panic_canceled")
+        await telegram_service.send_confirmation_message(chat_id, confirmation_msg)
+
+        # Send separator
+        separator_msg = create_separator_message()
+        await telegram_service.send_confirmation_message(chat_id, separator_msg)
+
+        # Show main menu
+        welcome_msg = create_welcome_message(user.display_name)
+        await telegram_service.send_message(
+            chat_id, welcome_msg["text"], welcome_msg["reply_markup"]
+        )
+        menu_manager.update_menu_state(chat_id, current_menu="main", incident_id=None)
+    else:
+        error_msg = create_error_message("cancel_failed")
+        await telegram_service.send_confirmation_message(chat_id, error_msg)
 
 
 async def _handle_cancel_panic_button(
