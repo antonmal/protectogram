@@ -1,22 +1,29 @@
 """Health check endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Response
 
 router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.get("/live")
 async def health_live() -> dict[str, str]:
-    """Liveness probe endpoint."""
-    return {"status": "ok"}
+    """Liveness probe endpoint.
+    
+    Returns:
+        dict: Status indicating the service is alive
+    """
+    return {"status": "live"}
 
 
 @router.get("/ready")
 async def health_ready() -> dict[str, str]:
-    """Readiness probe endpoint."""
-    # TODO: Check database connectivity, external services, etc.
-    # For now, return 503 to indicate the service is starting up
-    raise HTTPException(
-        status_code=503,
-        detail={"status": "starting"},
+    """Readiness probe endpoint.
+    
+    Returns:
+        dict: Status indicating the service is not ready (stub implementation)
+    """
+    return Response(
+        content='{"status": "not_ready"}',
+        media_type="application/json",
+        status_code=503
     )

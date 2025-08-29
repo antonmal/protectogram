@@ -1,36 +1,30 @@
 """Unit tests for health endpoints."""
 
-from typing import Any
-
 import pytest
-from httpx import AsyncClient
+from fastapi.testclient import TestClient
+
+from app.main import create_app
 
 
-@pytest.mark.asyncio
-async def test_health_live(async_client: AsyncClient) -> None:
+def client() -> TestClient:
+    """Create test client."""
+    app = create_app()
+    return TestClient(app)
+
+
+def test_health_live(client: TestClient) -> None:
     """Test health live endpoint."""
-    response = await async_client.get("/health/live")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-@pytest.mark.asyncio
-async def test_health_ready(async_client: AsyncClient) -> None:
-    """Test health ready endpoint."""
-    response = await async_client.get("/health/ready")
-    assert response.status_code == 503
-    assert response.json() == {"detail": {"status": "starting"}}
-
-
-def test_health_live_sync(client: Any) -> None:
-    """Test health live endpoint with sync client."""
     response = client.get("/health/live")
+
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "live"}
+    assert response.headers["content-type"] == "application/json"
 
 
-def test_health_ready_sync(client: Any) -> None:
-    """Test health ready endpoint with sync client."""
+def test_health_ready(client: TestClient) -> None:
+    """Test health ready endpoint."""
     response = client.get("/health/ready")
+
     assert response.status_code == 503
-    assert response.json() == {"detail": {"status": "starting"}}
+    assert response.json() == {"status": "not_ready"}
+    assert response.headers["content-type"] == "application/json"

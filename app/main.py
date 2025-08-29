@@ -13,7 +13,7 @@ from app.api import (
     telegram_router,
     telnyx_router,
 )
-from app.core import CorrelationIdMiddleware, settings, setup_logging
+from app.core import install_middlewares, settings, setup_logging
 from app.storage import init_database
 
 
@@ -42,8 +42,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Add middleware
-    app.add_middleware(CorrelationIdMiddleware)
+    # Install middlewares in correct order
+    install_middlewares(app)
 
     # Initialize database
     init_database()
