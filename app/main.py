@@ -1,86 +1,66 @@
-"""Main FastAPI application factory."""
+"""Main FastAPI application."""
 
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
-from app.api import admin, health, telegram, telnyx
-from app.core.config import settings
-from app.core.logging import setup_logging
-from app.scheduler.setup import setup_scheduler
+from app.api import (
+    admin_router,
+    health_router,
+    metrics_router,
+    telegram_router,
+    telnyx_router,
+)
+from app.core import CorrelationIdMiddleware, settings, setup_logging
+from app.storage import init_database
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan manager."""
+    """Application lifespan context manager."""
     # Startup
-    setup_logging()
-
-    # Conditional database and scheduler setup
-    if settings.ENABLE_DB:
-        from app.core.database import init_db
-
-        await init_db()
-
-    if settings.SCHEDULER_ENABLED:
-        await setup_scheduler()
-
+    # TODO: Initialize external services, load configurations, etc.
     yield
     # Shutdown
-    # Cleanup will be handled by FastAPI
+    # TODO: Cleanup resources, close connections, etc.
 
 
 def create_app() -> FastAPI:
-    """Create and configure FastAPI application."""
+    """Create and configure the FastAPI application."""
+    # Setup logging
+    setup_logging()
+
+    # Create FastAPI app
     app = FastAPI(
         title="Protectogram",
-        description="Telegram + Telnyx safety assistant - Panic Button v1",
+        description="Incident Management System",
         version="0.1.0",
+        docs_url="/docs" if settings.app_env != "production" else None,
+        redoc_url="/redoc" if settings.app_env != "production" else None,
         lifespan=lifespan,
     )
 
-    # CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
+    # Add middleware
+    app.add_middleware(CorrelationIdMiddleware)
 
-    # Include routers
-    app.include_router(health.router, prefix="/health", tags=["health"])
-    app.include_router(telegram.router, prefix="/telegram", tags=["telegram"])
-    app.include_router(telnyx.router, prefix="/telnyx", tags=["telnyx"])
-    app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    # Initialize database
+    init_database()
 
-    # Prometheus metrics
+    # Mount Prometheus metrics
     metrics_app = make_asgi_app()
     app.mount("/metrics", metrics_app)
+
+    # Include routers
+    app.include_router(health_router)
+    app.include_router(metrics_router)
+    app.include_router(telegram_router)
+    app.include_router(telnyx_router)
+    app.include_router(admin_router)
 
     return app
 
 
+# Create the app instance
 app = create_app()
-
-
-def main() -> None:
-    """Main entry point for the application."""
-    import uvicorn
-
-    port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",  # nosec B104: binding for local dev only; prod runs behind Fly proxy
-        port=port,
-        reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower(),
-    )
-
-
-if __name__ == "__main__":
-    main()

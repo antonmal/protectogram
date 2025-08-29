@@ -1,177 +1,80 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "migrations*"]
 
 [project]
 name = "protectogram"
 version = "0.1.0"
-description = "Telegram + Telnyx safety assistant - Panic Button v1"
+description = "Protectogram - Incident Management System"
 authors = [
-    {name = "Protectogram Team", email = "team@protectogram.com"}
+    {name = "Anton Malkov", email = "anton@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
+license = {text = "MIT"}
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    # Core Framework & Async
-    "fastapi==0.111.0",
-    "uvicorn[standard]==0.32.0",
-    "pydantic==2.10.0",
-    "pydantic-settings==2.8.0",
-
-    # Database & ORM
-    "sqlalchemy==2.0.30",
-    "asyncpg==0.30.0",
-    "alembic==1.14.0",
-
-    # Task Scheduling
-    "apscheduler==4.0.0",
-    "psycopg2-binary==2.9.10",
-
-    # Integrations
-    "aiogram==3.10.0",
-    "telnyx==0.5.0",
-    "httpx==0.28.0",
-
-    # Monitoring & Observability
-    "prometheus-client==0.21.0",
-    "structlog==24.4.0",
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.6",
+    "sqlalchemy[asyncio]==2.0.32",
+    "asyncpg==0.29.0",
+    "alembic==1.13.2",
+    "apscheduler==3.10.4",
+    "httpx==0.27.2",
+    "aiogram==3.7.0",
+    "telnyx==2.1.6",
+    "pydantic>=2.4.1,<2.8",
+    "pydantic-settings==2.4.0",
+    "python-dotenv==1.0.1",
+    "prometheus-client==0.20.0",
+    "structlog==24.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    # Development & Testing
-    "pytest==8.4.1",
-    "pytest-asyncio==1.1.0",
-    "pytest-cov==6.2.1",
-    "ruff==0.12.10",
-    "mypy==1.17.1",
-    "pre-commit==4.3.0",
-    "bandit==1.8.6",
-    "safety==3.6.1b0",
+    "pytest==8.3.2",
+    "pytest-asyncio==0.23.8",
+    "respx==0.21.1",
+    "freezegun==1.5.1",
+    "ruff==0.6.1",
+    "mypy==1.11.1",
+    "bandit==1.7.9",
+    "types-requests==2.32.0.20240712",
+    "typing-extensions==4.12.2",
 ]
-
-[project.scripts]
-protectogram = "app.main:main"
 
 [tool.ruff]
+line-length = 100
 target-version = "py312"
-line-length = 88
-
-[tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
-]
-ignore = [
-    "E501",  # line too long, handled by ruff formatter
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-"tests/**/*" = ["B011"]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = []
 
 [tool.ruff.format]
-# Like Black, use double quotes for strings.
-quote-style = "double"
-
-# Like Black, indent with spaces, rather than tabs.
-indent-style = "space"
-
-# Like Black, respect magic trailing commas.
-skip-magic-trailing-comma = false
-
-# Like Black, automatically detect the appropriate line ending.
-line-ending = "auto"
+line-length = 100
 
 [tool.mypy]
 python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
 warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
-
-# Ignore SQLAlchemy model attribute access issues
-[[tool.mypy.overrides]]
-module = [
-    "app.storage.models",
-    "app.domain.panic",
-    "app.integrations.telnyx.call_control",
-    "app.integrations.telegram.handlers",
-    "app.integrations.telegram.outbox",
+no_implicit_optional = true
+disallow_untyped_defs = true
+exclude = [
+    "migrations/.*",
 ]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "aiogram.*",
-    "telnyx.*",
-    "apscheduler.*",
-]
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--cov=app",
-    "--cov-report=term-missing",
-    "--cov-report=xml",
-    "--cov-report=html",
-]
 markers = [
-    "unit: pure logic, no I/O",
-    "contract: signatures, no app/DB",
-    "integration: app+DB async tests",
-    "concurrent: requires dedicated DB/schema (no SAVEPOINT)",
-    "asyncio: Async tests (requires event loop)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "smoke: marks tests as smoke tests",
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "contract: Contract tests",
 ]
-
-[tool.coverage.run]
-source = ["app"]
-omit = [
-    "*/tests/*",
-    "*/migrations/*",
-    "*/__init__.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
+asyncio_mode = "auto"
+testpaths = ["tests"]

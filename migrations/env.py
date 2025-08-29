@@ -1,13 +1,15 @@
+"""Alembic environment configuration."""
+
 import asyncio
-import os
 from logging.config import fileConfig
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from alembic import context
 from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.storage.models import Base
+from app.core.settings import settings
+from app.storage.base import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -22,85 +24,17 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
-
-# --- STRICT DB URL SOURCE ORDER ---
-# 1) -x db_url=... (CLI override)
-# 2) ALEMBIC_DATABASE_URL (env)
-# 3) sqlalchemy.url from alembic.ini (fallback; we will normalize it too)
-
-
-def _normalize_asyncpg_url(raw: str) -> tuple[str, dict]:
-    """
-    Normalize any Postgres URL for SQLAlchemy+asyncpg and remove sslmode:
-    - postgres:// → postgresql+asyncpg://
-    - postgresql:// → postgresql+asyncpg://
-    - If host is private (*.internal or fdaa:), enforce ssl=disable and empty connect_args
-    - Else enforce ssl=require (URL param) and connect_args={"ssl": "require"}
-    - Remove any 'sslmode' from query entirely (asyncpg doesn't accept it)
-    """
-    if not raw:
-        raise RuntimeError(
-            "Database URL is empty for Alembic. Set ALEMBIC_DATABASE_URL or pass -x db_url=..."
-        )
-
-    # driver normalization
-    if raw.startswith("postgres://"):
-        raw = "postgresql+asyncpg://" + raw[len("postgres://") :]
-    elif raw.startswith("postgresql://"):
-        raw = "postgresql+asyncpg://" + raw[len("postgresql://") :]
-
-    parts = urlsplit(raw)
-    q = dict(parse_qsl(parts.query, keep_blank_values=True))
-
-    # remove sslmode completely
-    if "sslmode" in q:
-        q.pop("sslmode", None)
-
-    host = (parts.hostname or "").lower()
-    is_internal = (
-        host.endswith(".internal")
-        or host.endswith(".flycast")
-        or host.startswith("fdaa:")
-    )
-
-    if is_internal:
-        q["ssl"] = "disable"
-        connect_args = {}
-    else:
-        q["ssl"] = "require"
-        connect_args = {"ssl": "require"}
-
-    # rebuild query
-    raw = urlunsplit(parts._replace(query=urlencode(q)))
-
-    return raw, connect_args
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
 
 
-def _get_db_url_and_args() -> tuple[str, dict]:
-    x = context.get_x_argument(as_dictionary=True) or {}
-    raw = (
-        x.get("db_url")
-        or os.getenv("ALEMBIC_DATABASE_URL")
-        or context.config.get_main_option("sqlalchemy.url")
-    )
-    url, connect_args = _normalize_asyncpg_url(raw)
-    return url, connect_args
-
-
-def get_database_url() -> str:
-    """Get database URL in order of precedence:
-    1. CLI argument: -x db_url=...
-    2. Environment variable: ALEMBIC_DATABASE_URL
-    3. Config file: sqlalchemy.url (fallback only)
-    """
-    # Check CLI argument first
-    cli_args = context.get_x_argument(as_dictionary=True)
-    db_url = (
-        cli_args.get("db_url")
-        or os.environ.get("ALEMBIC_DATABASE_URL")
-        or config.get_main_option("sqlalchemy.url")
-    )
-    return db_url
+def get_url() -> str:
+    """Get database URL from settings."""
+    if not settings.database_url:
+        raise ValueError("DATABASE_URL not set")
+    return settings.database_url
 
 
 def run_migrations_offline() -> None:
@@ -115,7 +49,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = get_database_url()
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -127,32 +61,35 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+def do_run_migrations(connection: Connection) -> None:
+    """Run migrations."""
+    context.configure(connection=connection, target_metadata=target_metadata)
 
-    In this scenario we need to create an Engine
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """In this scenario we need to create an Engine
     and associate a connection with the context.
 
     """
-    db_url, connect_args = _get_db_url_and_args()
-
-    connectable = create_async_engine(
-        db_url,
-        pool_pre_ping=True,
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = get_url()
+    connectable = async_engine_from_config(
+        configuration,
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args=connect_args,
     )
 
-    def do_run_migrations(connection):
-        context.configure(connection=connection, target_metadata=target_metadata)
-        with context.begin_transaction():
-            context.run_migrations()
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
 
-    async def run_async_migrations():
-        async with connectable.begin() as connection:
-            await connection.run_sync(do_run_migrations)
-        await connectable.dispose()
+    await connectable.dispose()
 
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
     asyncio.run(run_async_migrations())
 
 

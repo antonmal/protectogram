@@ -1,1 +1,1 @@
-"""APScheduler setup and job management."""
+"""Background task scheduler."""

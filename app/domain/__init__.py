@@ -1,1 +1,1 @@
-"""Domain logic for panic incidents and cascade management."""
+"""Domain models and business logic."""

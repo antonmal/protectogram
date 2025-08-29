@@ -1,35 +1,30 @@
-# Core Framework & Async
-fastapi==0.116.1
-uvicorn[standard]==0.35.0
-pydantic==2.9.2
-pydantic-settings==2.10.1
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy[asyncio]
+greenlet
+asyncpg
+psycopg[binary]
+alembic
+apscheduler
+httpx
+aiogram
+telnyx
+pynacl
+python-dotenv
+prometheus-client
+structlog
 
-# Database & ORM
-SQLAlchemy==2.0.43
-asyncpg==0.30.0
-alembic==1.16.4
-greenlet==3.2.3
+pytest
+pytest-asyncio
+respx
+freezegun
+ruff
+mypy
+bandit
+typing-extensions
+types-requests
 
-# Task Scheduling
-APScheduler==3.11.0
-psycopg2-binary==2.9.10
-
-# Integrations
-aiogram==3.22.0
-telnyx==2.1.6
-httpx==0.28.1
-
-# Monitoring & Observability
-prometheus-client==0.22.1
-structlog==25.4.0
-
-# Development & Testing (optional)
-pytest==8.4.1
-pytest-asyncio==1.1.0
-pytest-cov==6.2.1
-ruff==0.12.10
-mypy==1.17.1
-pre-commit==4.3.0
-bandit==1.8.6
-safety==3.6.1b0
-testcontainers[postgresql]==3.7.1
+# Note: starlette and magic-filter are intentionally not listed here;
+# FastAPI/aiogram will pull them. We pin them in constraints.txt.

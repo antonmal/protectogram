@@ -1,1 +1,1 @@
-"""Telnyx Call Control integration."""
+"""Telnyx integration."""

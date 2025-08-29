@@ -1,17 +1,21 @@
-"""Structured logging configuration."""
+"""Logging configuration with structlog."""
 
 import logging
 import sys
+import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from structlog.stdlib import LoggerFactory
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
-from app.core.config import settings
+from app.core.settings import settings
 
 
 def setup_logging() -> None:
-    """Setup structured logging with correlation IDs and incident tracking."""
+    """Configure structured logging."""
     # Configure structlog
     structlog.configure(
         processors=[
@@ -26,7 +30,7 @@ def setup_logging() -> None:
             structlog.processors.JSONRenderer(),
         ],
         context_class=dict,
-        logger_factory=LoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
@@ -35,33 +39,39 @@ def setup_logging() -> None:
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, settings.LOG_LEVEL.upper()),
+        level=getattr(logging, settings.log_level.upper()),
     )
 
-    # Set log levels for noisy libraries
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("apscheduler").setLevel(logging.INFO)
+
+class CorrelationIdMiddleware(BaseHTTPMiddleware):
+    """Middleware to add correlation ID to requests."""
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Add correlation ID to request and response headers."""
+        # Get correlation ID from headers or generate new one
+        correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+
+        # Add to request state
+        request.state.correlation_id = correlation_id
+
+        # Process request
+        response = await call_next(request)
+
+        # Add correlation ID to response headers
+        response.headers["X-Correlation-ID"] = correlation_id
+
+        return response
 
 
-def get_logger(name: str) -> structlog.stdlib.BoundLogger:
+def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """Get a structured logger instance."""
     return structlog.get_logger(name)
 
 
 def log_with_context(
-    logger: structlog.stdlib.BoundLogger,
-    correlation_id: str | None = None,
-    incident_id: str | None = None,
-    **kwargs: Any,
+    logger: structlog.stdlib.BoundLogger, **context: Any
 ) -> structlog.stdlib.BoundLogger:
-    """Add correlation and incident context to logger."""
-    context: dict[str, Any] = {}
-
-    if correlation_id:
-        context["correlation_id"] = correlation_id
-    if incident_id:
-        context["incident_id"] = incident_id
-
-    context.update(kwargs)
-
+    """Add context to logger."""
     return logger.bind(**context)

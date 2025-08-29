@@ -1,3 +1,3 @@
-"""Protectogram - Telegram + Telnyx safety assistant."""
+"""Protectogram - Incident Management System."""
 
 __version__ = "0.1.0"

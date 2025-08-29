@@ -1,1 +1,1 @@
-"""Telegram Bot API integration."""
+"""Telegram bot integration."""

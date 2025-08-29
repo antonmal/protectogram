@@ -1,26 +1,10 @@
-# Bandit configuration for Protectogram
-skips: []
-exclude: []
-
-# Profiles for different environments
-profiles:
-  # Development profile - allows some dev-specific patterns
-  dev:
-    skips: []
-    exclude: []
-
-  # Production profile - stricter
-  prod:
-    skips: []
-    exclude: []
-
-# Target specific files/directories
-targets:
-  - app/
-  - tests/
-
-# Severity levels to include
-severity: ["Low", "Medium", "High"]
-
-# Confidence levels to include
-confidence: ["Low", "Medium", "High"]
+exclude_dirs:
+  - tests
+  - .venv
+  - .git
+  - migrations/__pycache__
+skips:
+  - B101
+# optional: restrict targets to app only
+# targets:
+#   - app

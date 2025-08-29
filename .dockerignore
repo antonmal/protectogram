@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# GitHub
+.github
+
+# Tests
+tests/
+.pytest_cache/
+
+# Development tools
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Documentation
+README.md
+*.md
+
+# CI/CD
+.pre-commit-config.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
