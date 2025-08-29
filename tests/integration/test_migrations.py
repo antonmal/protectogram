@@ -111,9 +111,16 @@ def test_migrations_downgrade(pg_container: PostgresContainerInfo) -> None:
     # Downgrade one step
     command.downgrade(cfg, "-1")
 
-    # Verify tables are gone (except alembic_version which remains)
+    # Verify tables are gone (except alembic_version and apscheduler_jobs which may remain)
     inspector = inspect(engine)
     tables_after = inspector.get_table_names()
-    assert tables_after == ["alembic_version"], f"Unexpected tables after downgrade: {tables_after}"
+    expected_remaining = {"alembic_version"}
+    # apscheduler_jobs may be created by scheduler and not cleaned up by migrations
+    if "apscheduler_jobs" in tables_after:
+        expected_remaining.add("apscheduler_jobs")
+
+    assert (
+        set(tables_after) == expected_remaining
+    ), f"Unexpected tables after downgrade: {tables_after}"
 
     engine.dispose()

@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from prometheus_client import make_asgi_app
 
 from app.api import (
     admin_router,
@@ -14,16 +13,21 @@ from app.api import (
     telnyx_router,
 )
 from app.core import install_middlewares, settings, setup_logging
+from app.scheduler.setup import shutdown_scheduler, start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager."""
     # Startup
-    # TODO: Initialize external services, load configurations, etc.
+    if settings.scheduler_enabled:
+        await start_scheduler()
+
     yield
+
     # Shutdown
-    # TODO: Cleanup resources, close connections, etc.
+    if settings.scheduler_enabled:
+        await shutdown_scheduler()
 
 
 def create_app() -> FastAPI:
@@ -43,10 +47,6 @@ def create_app() -> FastAPI:
 
     # Install middlewares in correct order
     install_middlewares(app)
-
-    # Mount Prometheus metrics
-    metrics_app = make_asgi_app()
-    app.mount("/metrics", metrics_app)
 
     # Include routers
     app.include_router(health_router)

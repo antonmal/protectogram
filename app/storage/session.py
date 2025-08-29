@@ -24,10 +24,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session."""
     from app.core.settings import settings
 
-    if not settings.database_url:
-        raise RuntimeError("DATABASE_URL not set")
+    if not settings.app_database_url:
+        raise RuntimeError("APP_DATABASE_URL not set")
 
-    engine = get_async_engine(settings.database_url)
+    engine = get_async_engine(settings.app_database_url)
     async_session_maker = get_sessionmaker(engine)
 
     async with async_session_maker() as session:

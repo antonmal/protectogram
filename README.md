@@ -229,5 +229,39 @@ The database schema includes:
 - **inbox_events**: Incoming webhook events
 - **outbox_messages**: Outgoing messages
 - **scheduled_actions**: Scheduled tasks
+- **apscheduler_jobs**: APScheduler job store table
 
 All tables use `BIGSERIAL` primary keys and `TIMESTAMPTZ` timestamps with `now()` defaults.
+
+## Scheduler & Readiness
+
+### Scheduler Configuration
+
+The application uses APScheduler with AsyncIOScheduler for job management:
+
+- **Job Store**: SQLAlchemyJobStore using the sync database URL (`APP_DATABASE_URL_SYNC`)
+- **Executor**: AsyncIOExecutor for async job execution
+- **Persistence**: Jobs are stored in the `apscheduler_jobs` table (configurable via `SCHEDULER_JOBSTORE_TABLE_NAME`)
+
+### Health Endpoints
+
+- **`GET /health/live`**: Returns 200 if the process is alive
+- **`GET /health/ready`**: Returns 200 if:
+  - Database connectivity is available (using sync connection)
+  - Scheduler heartbeat is healthy (job store reachable)
+  - Returns 503 with error details if any check fails
+
+### Metrics
+
+- **`GET /metrics`**: Prometheus-formatted metrics including:
+  - `scheduler_job_lag_seconds`: Scheduler job execution lag
+  - `health_ready_checks_total`: Readiness check counters with result/reason labels
+
+**Note**: For production deployments, set scrape interval to ≥15s to avoid overwhelming the metrics endpoint.
+
+### Environment Variables
+
+Required for scheduler functionality:
+- `APP_DATABASE_URL_SYNC`: Sync PostgreSQL connection URL
+- `SCHEDULER_ENABLED`: Enable/disable scheduler (default: true)
+- `METRICS_ENABLED`: Enable/disable metrics endpoint (default: true)
