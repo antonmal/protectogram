@@ -78,12 +78,10 @@ class TelegramOutbox:
         except IntegrityError:
             # Message already sent, fetch existing record
             await session.rollback()
-            stmt = select(OutboxMessage).where(
-                OutboxMessage.idempotency_key == idempotency_key
-            )
+            stmt = select(OutboxMessage).where(OutboxMessage.idempotency_key == idempotency_key)
             result = await session.execute(stmt)
             existing = result.scalar_one()
-            
+
             if existing.status == "sent" and existing.provider_message_id:
                 return SendResult(
                     success=True,
@@ -101,28 +99,28 @@ class TelegramOutbox:
                 text=text,
                 reply_markup=reply_markup,
             )
-            
+
             # Update outbox record
             outbox_message.status = "sent"
             outbox_message.provider_message_id = str(response["result"]["message_id"])
             await session.commit()
-            
+
             # Increment metrics
             outbox_sent_total.labels(channel="telegram").inc()
-            
+
             return SendResult(
                 success=True,
                 message_id=str(response["result"]["message_id"]),
             )
-            
+
         except TelegramAPIError as e:
             # Update outbox record with error
             outbox_message.status = "error"
             await session.commit()
-            
+
             # Increment metrics
             outbox_errors_total.labels(channel="telegram").inc()
-            
+
             logger.error(
                 "Failed to send Telegram message",
                 extra={
@@ -131,16 +129,16 @@ class TelegramOutbox:
                     "idempotency_key": idempotency_key,
                 },
             )
-            
+
             return SendResult(success=False, error=str(e))
         except Exception as e:
             # Update outbox record with error
             outbox_message.status = "error"
             await session.commit()
-            
+
             # Increment metrics
             outbox_errors_total.labels(channel="telegram").inc()
-            
+
             logger.error(
                 "Unexpected error sending Telegram message",
                 extra={
@@ -149,5 +147,5 @@ class TelegramOutbox:
                     "idempotency_key": idempotency_key,
                 },
             )
-            
+
             return SendResult(success=False, error=str(e))

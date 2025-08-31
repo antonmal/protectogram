@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 def _is_testing() -> bool:
     """Check if we're running in a test environment."""
     import sys
+
     return "pytest" in sys.modules or any("test" in arg for arg in sys.argv)
 
 
@@ -29,9 +30,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
 
     # Database URLs
-    app_database_url: str | None = Field(
-        default=None, description="Async database connection URL"
-    )
+    app_database_url: str | None = Field(default=None, description="Async database connection URL")
     app_database_url_sync: str | None = Field(
         default=None, description="Sync database connection URL"
     )
@@ -68,9 +67,7 @@ class Settings(BaseSettings):
 
     # Telnyx
     telnyx_api_key: str | None = Field(default=None, description="Telnyx API key")
-    telnyx_webhook_secret: str | None = Field(
-        default=None, description="Telnyx webhook secret"
-    )
+    telnyx_webhook_secret: str | None = Field(default=None, description="Telnyx webhook secret")
 
     @model_validator(mode="after")
     def validate_scheduler_config(self) -> "Settings":

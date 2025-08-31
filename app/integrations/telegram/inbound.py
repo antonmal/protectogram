@@ -29,14 +29,11 @@ class InboundResult:
         self.error = error
 
 
-
-
-
 def check_allowlist(chat_id: int, allowlist: str | None) -> bool:
     """Check if chat ID is in allowlist."""
     if not allowlist:
         return True
-    
+
     allowed_ids = [int(x.strip()) for x in allowlist.split(",") if x.strip()]
     return chat_id in allowed_ids
 
@@ -58,7 +55,7 @@ async def process_inbound(
     update_dict = update.model_dump()
     chat_id = extract_chat_id(update_dict)
     message_type = None
-    
+
     # Check allowlist
     if chat_id and not check_allowlist(chat_id, allowlist):
         logger.info(
@@ -71,38 +68,38 @@ async def process_inbound(
     if update.message:
         message_type = "message"
         inbound_events_total.labels(provider="telegram", type="message").inc()
-        
+
         if update.message.text:
             text = update.message.text.strip()
-            
+
             if text == "/ping" and chat_id is not None:
                 response_text = "pong"
                 idempotency_key = generate_idempotency_key(chat_id, response_text)
-                
+
                 result = await outbox.send_text(
                     session=session,
                     chat_id=chat_id,
                     text=response_text,
                     idempotency_key=idempotency_key,
                 )
-                
+
                 if not result.success:
                     logger.error(
                         "Failed to send ping response",
                         extra={"chat_id": chat_id, "error": result.error},
                     )
-                    
+
             elif text == "/start" and chat_id is not None:
                 response_text = "👋 Привет! Бот подключен."
                 idempotency_key = generate_idempotency_key(chat_id, response_text)
-                
+
                 result = await outbox.send_text(
                     session=session,
                     chat_id=chat_id,
                     text=response_text,
                     idempotency_key=idempotency_key,
                 )
-                
+
                 if not result.success:
                     logger.error(
                         "Failed to send start response",
@@ -113,9 +110,9 @@ async def process_inbound(
     elif update.callback_query:
         message_type = "callback_query"
         inbound_events_total.labels(provider="telegram", type="callback_query").inc()
-        
+
         callback_query = update.callback_query
-        
+
         # Answer callback query
         try:
             await outbox.client.answer_callback_query(
@@ -128,19 +125,19 @@ async def process_inbound(
                 "Failed to answer callback query",
                 extra={"callback_query_id": callback_query.id, "error": str(e)},
             )
-        
+
         # Send acknowledgment message if we have a chat
         if chat_id is not None:
             response_text = "✅ Клик получен."
             idempotency_key = generate_idempotency_key(chat_id, response_text)
-            
+
             result = await outbox.send_text(
                 session=session,
                 chat_id=chat_id,
                 text=response_text,
                 idempotency_key=idempotency_key,
             )
-            
+
             if not result.success:
                 logger.error(
                     "Failed to send callback acknowledgment",

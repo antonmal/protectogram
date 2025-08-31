@@ -53,9 +53,7 @@ class TelegramClient:
             )
 
         if not response.is_success:
-            raise TelegramAPIError(
-                response.status_code, f"Failed to send message: {response.text}"
-            )
+            raise TelegramAPIError(response.status_code, f"Failed to send message: {response.text}")
 
         return response.json()
 

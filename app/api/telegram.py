@@ -27,7 +27,7 @@ async def get_telegram_client() -> TelegramClient:
     settings = Settings()
     if not settings.telegram_bot_token:
         raise HTTPException(status_code=500, detail="Telegram bot token not configured")
-    
+
     return TelegramClient(
         bot_token=settings.telegram_bot_token,
         api_base=settings.telegram_api_base,
@@ -49,30 +49,31 @@ async def telegram_webhook(
 ) -> dict[str, Any]:
     """Handle Telegram webhook."""
     settings = Settings()
-    
+
     # Validate webhook secret
     secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if not verify_telegram_secret(secret_token, settings.telegram_webhook_secret or ""):
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    
+
     # Parse request body
     try:
         body = await request.json()
     except Exception as e:
         logger.error("Failed to parse webhook body", extra={"error": str(e)})
         raise HTTPException(status_code=400, detail="Invalid JSON body") from e
-    
+
     # Parse update
     try:
         from aiogram.types import Update
+
         update = Update.model_validate(body)
     except Exception as e:
         logger.error("Failed to parse Telegram update", extra={"error": str(e)})
         raise HTTPException(status_code=400, detail="Invalid update format") from e
-    
+
     # Compute provider event ID
     provider_event_id = compute_provider_event_id(body)  # Use raw JSON for parsing
-    
+
     # Log correlation info
     correlation_id = getattr(request.state, "correlation_id", "-")
     chat_id = extract_chat_id(body)  # Use raw JSON for parsing
@@ -85,14 +86,14 @@ async def telegram_webhook(
             "chat_id": chat_id,
         },
     )
-    
+
     # Try to insert inbox event for deduplication
     inbox_event = InboxEvent(
         provider="telegram",
         provider_event_id=provider_event_id,
         payload_json=body,
     )
-    
+
     try:
         session.add(inbox_event)
         await session.commit()
@@ -100,7 +101,7 @@ async def telegram_webhook(
         # Duplicate event
         await session.rollback()
         duplicate_inbox_dropped_total.labels(provider="telegram").inc()
-        
+
         logger.info(
             "Duplicate Telegram event dropped",
             extra={
@@ -108,9 +109,9 @@ async def telegram_webhook(
                 "provider_event_id": provider_event_id,
             },
         )
-        
+
         return {"ok": True}
-    
+
     # Process inbound message
     try:
         result = await process_inbound(
@@ -119,11 +120,11 @@ async def telegram_webhook(
             session=session,
             allowlist=settings.telegram_allowlist_chat_ids,
         )
-        
+
         # Mark as processed
         inbox_event.processed_at = datetime.now()
         await session.commit()
-        
+
         if result.processed:
             logger.info(
                 "Telegram event processed successfully",
@@ -143,7 +144,7 @@ async def telegram_webhook(
                     "chat_id": result.chat_id,
                 },
             )
-            
+
     except Exception as e:
         logger.error(
             "Failed to process Telegram event",
@@ -154,8 +155,5 @@ async def telegram_webhook(
             },
         )
         # Don't raise - always return 200 to Telegram
-    
+
     return {"ok": True}
-
-
-

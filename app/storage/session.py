@@ -1,7 +1,6 @@
 """Database session management."""
 
 from collections.abc import AsyncGenerator
-from typing import Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
@@ -57,7 +56,7 @@ def get_sync_session():
     """Get sync database session."""
     engine = create_sync_engine_from_env()
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
+
     session = SessionLocal()
     try:
         yield session

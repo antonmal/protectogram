@@ -1,8 +1,10 @@
 """Integration tests for scheduler persistence."""
 
 import os
+
 import pytest
-from app.scheduler.setup import start_scheduler, shutdown_scheduler
+
+from app.scheduler.setup import shutdown_scheduler, start_scheduler
 
 
 @pytest.mark.integration
@@ -19,21 +21,23 @@ async def test_scheduler_persistence():
     try:
         # Start scheduler
         await start_scheduler()
-        
+
         # Verify scheduler is running
         from app.scheduler.setup import _scheduler
+
         assert _scheduler.running
-        
+
         # Check that jobs table was created
         import sqlalchemy as sa
+
         engine = sa.create_engine(url_sync, future=True)
         with engine.connect() as conn:
             inspector = sa.inspect(engine)
             tables = inspector.get_table_names()
             assert "apscheduler_jobs" in tables, "Scheduler jobs table not created"
-        
+
         engine.dispose()
-        
+
     finally:
         # Shutdown scheduler
         await shutdown_scheduler()
@@ -50,16 +54,17 @@ async def test_scheduler_lifecycle():
     try:
         # Start scheduler
         await start_scheduler()
-        
+
         # Verify scheduler is running
         from app.scheduler.setup import _scheduler
+
         assert _scheduler.running
-        
+
         # Shutdown scheduler
         await shutdown_scheduler()
-        
+
         # Verify scheduler is stopped
         assert not _scheduler.running
-        
+
     finally:
         os.environ.pop("SCHEDULER_ENABLED", None)

@@ -1,6 +1,7 @@
 """Unit test configuration."""
 
 import os
+
 import pytest
 from fastapi import FastAPI
 
@@ -23,5 +24,6 @@ from app.main import create_app as _create_app  # noqa: E402
 def app() -> FastAPI:
     """Return a fresh app instance for unit tests."""
     from tests.conftest import reset_settings_cache
+
     reset_settings_cache()
     return _create_app()

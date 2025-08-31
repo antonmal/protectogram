@@ -1,6 +1,7 @@
 """Unit tests for health endpoints."""
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,7 +21,7 @@ def test_health_ready_no_db(app):
     # Ensure no database URLs are set
     os.environ.pop("APP_DATABASE_URL", None)
     os.environ.pop("APP_DATABASE_URL_SYNC", None)
-    
+
     client = TestClient(app)
     response = client.get("/health/ready")
     assert response.status_code == 503
@@ -36,7 +37,7 @@ def test_metrics_endpoint(app):
     response = client.get("/metrics")
     assert response.status_code == 200
     assert response.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
-    
+
     content = response.text
     assert "inbound_events_total" in content
     assert "outbox_sent_total" in content

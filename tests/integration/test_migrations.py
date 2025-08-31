@@ -1,6 +1,7 @@
 """Integration tests for database migrations."""
 
 import os
+
 import pytest
 import sqlalchemy as sa
 
@@ -16,9 +17,9 @@ def test_migrations_head_applied():
         # Check that expected tables exist
         inspector = sa.inspect(engine)
         tables = inspector.get_table_names()
-        
+
         expected_tables = ["inbox_events", "outbox_messages"]
         for table in expected_tables:
             assert table in tables, f"Table {table} not found in database"
-    
+
     engine.dispose()

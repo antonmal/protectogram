@@ -1,7 +1,6 @@
 """Integration tests for metrics and readiness endpoints."""
 
 import pytest
-from httpx import AsyncClient
 
 
 @pytest.mark.integration
@@ -21,7 +20,7 @@ async def test_metrics_with_container(async_client):
     response = await async_client.get("/metrics")
     assert response.status_code == 200
     content = response.text
-    
+
     # Check for expected metrics
     assert "inbound_events_total" in content
     assert "outbox_sent_total" in content

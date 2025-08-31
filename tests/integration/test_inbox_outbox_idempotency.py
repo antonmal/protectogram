@@ -1,15 +1,15 @@
 """Integration tests for inbox deduplication and outbox idempotency."""
 
-import os
-import pytest
-import respx
-import httpx
-from httpx import AsyncClient
-from pathlib import Path
 import json
+import os
+from pathlib import Path
+
+import httpx
+import pytest
 from sqlalchemy import create_engine, text
 
 CANNED_UPDATES_DIR = Path(__file__).parent.parent / "contract" / "canned_updates"
+
 
 def load_canned_update(filename: str) -> dict:
     with open(CANNED_UPDATES_DIR / filename) as f:
@@ -54,9 +54,13 @@ async def test_inbox_outbox_idempotency(async_client, respx_mock):
     # DB assertions
     engine = create_engine(os.getenv("APP_DATABASE_URL_SYNC"))
     with engine.connect() as conn:
-        count = conn.execute(text("SELECT COUNT(*) FROM inbox_events WHERE provider='telegram'")).scalar_one()
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM inbox_events WHERE provider='telegram'")
+        ).scalar_one()
         assert count == 1
-        count = conn.execute(text("SELECT COUNT(*) FROM outbox_messages WHERE channel='telegram'")).scalar_one()
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM outbox_messages WHERE channel='telegram'")
+        ).scalar_one()
         assert count == 1
         message_id = conn.execute(
             text("SELECT provider_message_id FROM outbox_messages WHERE channel='telegram'")
@@ -65,5 +69,10 @@ async def test_inbox_outbox_idempotency(async_client, respx_mock):
     engine.dispose()
 
     # Cleanup
-    for k in ["TELEGRAM_BOT_TOKEN","TELEGRAM_WEBHOOK_SECRET","TELEGRAM_API_BASE","TELEGRAM_ALLOWLIST_CHAT_IDS"]:
+    for k in [
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_SECRET",
+        "TELEGRAM_API_BASE",
+        "TELEGRAM_ALLOWLIST_CHAT_IDS",
+    ]:
         os.environ.pop(k, None)

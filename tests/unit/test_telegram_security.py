@@ -1,7 +1,5 @@
 """Unit tests for Telegram security utilities."""
 
-import pytest
-
 from app.integrations.telegram.security import verify_telegram_secret
 
 

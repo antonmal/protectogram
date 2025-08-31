@@ -21,13 +21,13 @@ from app.scheduler.setup import shutdown_scheduler, start_scheduler
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager."""
     settings = get_settings()
-    
+
     # Startup
     if settings.scheduler_enabled:
         await start_scheduler()
-    
+
     yield
-    
+
     # Shutdown
     if settings.scheduler_enabled:
         await shutdown_scheduler()
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     settings = get_settings()
-    
+
     # Setup logging
     setup_logging()
 
