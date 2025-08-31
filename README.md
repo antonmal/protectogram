@@ -1,267 +1,242 @@
 # Protectogram
 
-Protectogram is an incident management system designed to handle cascading incidents and provide real-time notifications through multiple channels including Telegram and SMS via Telnyx.
+Incident Management System
 
 ## Features
 
-- **Health Monitoring**: Live and ready health checks with Prometheus metrics
-- **Telegram Integration**: Bot for incident notifications and management
-- **SMS Notifications**: Telnyx integration for SMS alerts
-- **Database**: PostgreSQL with async SQLAlchemy
-- **Scheduling**: APScheduler for automated tasks
-- **Monitoring**: Prometheus metrics and structured logging
+- FastAPI-based web application
+- Structured JSON logging with correlation IDs
+- Health and metrics endpoints
+- APScheduler for background tasks
+- PostgreSQL database with Alembic migrations
+- Testcontainers for integration testing
 
-## Quick Start
+## Development Prerequisites
 
-### Prerequisites
+### Required Software
 
-- Python 3.12+
-- PostgreSQL (for production)
-- Telegram Bot Token (optional)
-- Telnyx API Key (optional)
+- **Python 3.12+**
+- **Docker Desktop** (macOS/Windows) or **Colima** (macOS) - for integration tests
+- **Git**
 
-### Local Development Setup
+### Docker Setup
 
-1. **Clone the repository**
+1. **Start Docker:**
    ```bash
-   git clone <repository-url>
-   cd protectogram
+   # macOS with Docker Desktop
+   open -a Docker
+   
+   # macOS with Colima
+   colima start
    ```
 
-2. **Create virtual environment**
+2. **Pre-pull Postgres image** (recommended for slow networks):
+   ```bash
+   docker pull postgres:16
+   ```
+
+## Development Setup
+
+1. **Create virtual environment:**
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-3. **Install dependencies**
+2. **Install dependencies:**
    ```bash
-   pip install -e .
-   pip install -e ".[dev]"
+   pip install -r requirements.txt
    ```
 
-4. **Set up environment variables**
+3. **Set up environment variables:**
    ```bash
    cp env.example .env
    # Edit .env with your configuration
    ```
 
-5. **Run the development server**
+4. **Run database migrations:**
    ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+   alembic upgrade head
    ```
 
-6. **Test the application**
+5. **Start the application:**
    ```bash
-   # Health check
-   curl http://localhost:8080/health/live
-   
-   # Ready check
-   curl http://localhost:8080/health/ready
-   
-   # Metrics
-   curl http://localhost:8080/metrics
+   uvicorn app.main:app --reload
    ```
 
-## Development Commands
+## Testing
 
-### Code Quality
+- **Unit tests:** `pytest tests/unit/`
+- **Integration tests:** `pytest tests/integration/` (requires Docker)
+- **Contract tests:** `pytest tests/contract/`
+- **All tests:** `pytest`
 
-```bash
-# Linting
-ruff check .
+## Health & Metrics
 
-# Formatting
-ruff format .
-
-# Type checking
-mypy .
-
-# Security scanning
-bandit -q -r app -x tests
-```
-
-### Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run unit tests only
-pytest tests/unit
-
-# Run with coverage
-pytest --cov=app tests/
-```
-
-### Docker
-
-```bash
-# Build image
-docker build -t protectogram:local .
-
-# Run container
-docker run -p 8080:8080 protectogram:local
-```
-
-## Project Structure
-
-```
-app/
-├── api/                    # FastAPI routers
-│   ├── health.py          # Health endpoints
-│   ├── metrics.py         # Prometheus metrics
-│   ├── telegram.py        # Telegram webhooks
-│   ├── telnyx.py          # Telnyx webhooks
-│   └── admin.py           # Admin endpoints
-├── core/                   # Core functionality
-│   ├── settings.py        # Configuration
-│   ├── logging.py         # Logging setup
-│   └── flags.py           # Feature flags
-├── domain/                 # Business logic
-├── integrations/           # External integrations
-│   ├── telegram/          # Telegram bot
-│   └── telnyx/            # Telnyx client
-├── scheduler/              # Background tasks
-└── storage/               # Database layer
-```
-
-## API Endpoints
-
-- `GET /health/live` - Liveness probe
-- `GET /health/ready` - Readiness probe
-- `GET /metrics` - Prometheus metrics
-- `POST /webhook/telegram` - Telegram webhook
-- `POST /webhook/telnyx` - Telnyx webhook
-
-## Deployment
-
-### Fly.io
-
-```bash
-# Deploy to staging
-fly deploy
-
-# Deploy to production
-fly deploy --config fly.prod.toml
-```
-
-### Environment Variables
-
-Required environment variables:
-- `APP_ENV`: Environment (local, staging, production)
-- `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
-- `DATABASE_URL`: PostgreSQL connection string
-
-Optional:
-- `TELEGRAM_BOT_TOKEN`: Telegram bot token
-- `TELNYX_API_KEY`: Telnyx API key
-- `TELNYX_WEBHOOK_SECRET`: Telnyx webhook secret
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Database & Migrations
-
-### Database URLs
-
-The application uses different database URLs for different purposes:
-
-- **Web ORM (async)**: `APP_DATABASE_URL` - Uses `postgresql+asyncpg://` for FastAPI async operations
-- **Alembic & APScheduler (sync)**: `APP_DATABASE_URL_SYNC` - Uses `postgresql+psycopg://` for migrations and job store
-- **Alembic override**: `ALEMBIC_DATABASE_URL` - If set, Alembic uses this instead of `APP_DATABASE_URL_SYNC`
-
-### Environment Variables
-
-```bash
-# Required for web app
-APP_DATABASE_URL=postgresql+asyncpg://user:pass@localhost/dbname
-
-# Required for migrations and APScheduler
-APP_DATABASE_URL_SYNC=postgresql+psycopg://user:pass@localhost/dbname
-
-# Optional Alembic override
-ALEMBIC_DATABASE_URL=postgresql+psycopg://user:pass@localhost/dbname
-```
-
-### Local Development
-
-For local development without a local PostgreSQL installation:
-
-1. **Integration tests** use Docker via Testcontainers (PostgreSQL 16)
-2. **If Docker is unavailable**, integration tests are skipped with a clear message
-3. **Migrations** can be tested using the integration test suite
-
-### Migration Commands
-
-```bash
-# Apply all migrations
-make migrate-up
-
-# Rollback last migration
-make migrate-down
-
-# Create new migration
-make migrate-revision name=add_new_table
-
-# Test migrations (requires Docker)
-make test-integration
-```
-
-### Schema
-
-The database schema includes:
-
-- **users**: User accounts with Telegram integration
-- **member_links**: Links between watchers and travelers
-- **incidents**: Incident tracking
-- **alerts**: Alert notifications
-- **call_attempts**: Phone call attempt tracking
-- **inbox_events**: Incoming webhook events
-- **outbox_messages**: Outgoing messages
-- **scheduled_actions**: Scheduled tasks
-- **apscheduler_jobs**: APScheduler job store table
-
-All tables use `BIGSERIAL` primary keys and `TIMESTAMPTZ` timestamps with `now()` defaults.
+- **Health check:** `GET /health/live` - Returns 200 if process is alive
+- **Readiness check:** `GET /health/ready` - Returns 200 if database and scheduler are healthy
+- **Metrics:** `GET /metrics` - Prometheus metrics in text format
 
 ## Scheduler & Readiness
 
-### Scheduler Configuration
+The application includes an APScheduler-based task scheduler that:
 
-The application uses APScheduler with AsyncIOScheduler for job management:
-
-- **Job Store**: SQLAlchemyJobStore using the sync database URL (`APP_DATABASE_URL_SYNC`)
-- **Executor**: AsyncIOExecutor for async job execution
-- **Persistence**: Jobs are stored in the `apscheduler_jobs` table (configurable via `SCHEDULER_JOBSTORE_TABLE_NAME`)
-
-### Health Endpoints
-
-- **`GET /health/live`**: Returns 200 if the process is alive
-- **`GET /health/ready`**: Returns 200 if:
-  - Database connectivity is available (using sync connection)
-  - Scheduler heartbeat is healthy (job store reachable)
-  - Returns 503 with error details if any check fails
-
-### Metrics
-
-- **`GET /metrics`**: Prometheus-formatted metrics including:
-  - `scheduler_job_lag_seconds`: Scheduler job execution lag
-  - `health_ready_checks_total`: Readiness check counters with result/reason labels
-
-**Note**: For production deployments, set scrape interval to ≥15s to avoid overwhelming the metrics endpoint.
+- Uses SQLAlchemyJobStore for persistence on `APP_DATABASE_URL_SYNC`
+- Runs a heartbeat job every minute to monitor scheduler health
+- Provides clean startup/shutdown hooks via FastAPI lifespan
+- Can be disabled by setting `SCHEDULER_ENABLED=false`
 
 ### Environment Variables
 
-Required for scheduler functionality:
-- `APP_DATABASE_URL_SYNC`: Sync PostgreSQL connection URL
-- `SCHEDULER_ENABLED`: Enable/disable scheduler (default: true)
-- `METRICS_ENABLED`: Enable/disable metrics endpoint (default: true)
+- `SCHEDULER_ENABLED` - Enable/disable scheduler (default: false)
+- `SCHEDULER_JOBSTORE_TABLE_NAME` - Job store table name (default: "apscheduler_jobs")
+- `STARTUP_HEARTBEAT_JOB_CRON` - Heartbeat job schedule (default: "*/1 * * * *")
+- `READINESS_DB_TIMEOUT_SEC` - Database timeout for readiness checks (default: 3)
+
+## Telegram Webhook & Outbox
+
+### Webhook Setup
+
+To set up Telegram webhook in staging:
+
+1. **Configure environment variables:**
+   ```bash
+   TELEGRAM_BOT_TOKEN=your_bot_token
+   TELEGRAM_WEBHOOK_SECRET=your_webhook_secret
+   TELEGRAM_API_BASE=https://api.telegram.org
+   TELEGRAM_ALLOWLIST_CHAT_IDS=1111,2222  # Optional: restrict to specific chat IDs
+   ```
+
+2. **Set webhook URL in Telegram:**
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://<your-app-domain>/telegram/webhook",
+       "secret_token": "<TELEGRAM_WEBHOOK_SECRET>"
+     }'
+   ```
+
+### Deduplication & Idempotency
+
+#### Inbox Deduplication
+- **Provider Event ID**: Unique identifier for each Telegram update
+  - For messages: `str(update.update_id)`
+  - For callback queries: `callback_query.id`
+- **Database**: `inbox_events` table with `UNIQUE(provider, provider_event_id)`
+- **Behavior**: Duplicate events are logged and dropped with 200 response
+
+#### Outbox Idempotency
+- **Idempotency Key**: Generated as `telegram:{chat_id}:{hash(text)}`
+- **Database**: `outbox_messages` table with `UNIQUE(idempotency_key)`
+- **Behavior**: 
+  - First call: Insert pending record, send message, update with `provider_message_id`
+  - Duplicate call: Return existing `provider_message_id` without network call
+
+### Supported Commands
+
+- `/start` → Replies with "👋 Привет! Бот подключен."
+- `/ping` → Replies with "pong"
+- Callback queries → Answers with acknowledgment and sends "✅ Клик получен."
+
+### Staging Allowlist
+
+During staging, use `TELEGRAM_ALLOWLIST_CHAT_IDS` to restrict bot access to specific chat IDs:
+```bash
+TELEGRAM_ALLOWLIST_CHAT_IDS=1111,2222,3333
+```
+
+Messages from non-allowed chats are ignored with a log entry but return 200 to Telegram.
+
+### Monitoring
+
+The following Prometheus metrics are available:
+- `inbound_events_total{provider="telegram",type}` - Inbound events by type
+- `duplicate_inbox_dropped_total{provider="telegram"}` - Duplicate events dropped
+- `outbox_sent_total{channel="telegram"}` - Messages sent successfully
+- `outbox_errors_total{channel="telegram"}` - Send errors
+
+### Security
+
+- **Webhook Secret**: Required `X-Telegram-Bot-Api-Secret-Token` header validation
+- **No Query Parameters**: Secret is never accepted in URL parameters
+- **Allowlist**: Optional chat ID restriction for staging environments
+
+## Local tests with Testcontainers
+
+### Prerequisites
+
+- **Docker**: Must be running locally for integration and contract tests
+- **No local Postgres required**: All database tests use ephemeral containers
+
+### Test Setup
+
+The test suite automatically provisions PostgreSQL 16 containers for integration and contract tests:
+
+- **Session-level container**: Started once per test session with automatic migration application
+- **Environment variables**: Auto-set by `tests/integration/conftest.py`
+- **Database URLs**: 
+  - `APP_DATABASE_URL` (async) for web app
+  - `APP_DATABASE_URL_SYNC` (sync) for Alembic and APScheduler
+  - `ALEMBIC_DATABASE_URL` (sync) for migrations
+
+### Running Tests
+
+```bash
+# Unit tests (no database required)
+pytest -q tests/unit --import-mode=importlib
+
+# Integration tests (requires Docker)
+pytest -q tests/integration --import-mode=importlib
+
+# Contract tests (requires Docker)
+pytest -q tests/contract --import-mode=importlib
+
+# All tests
+pytest --import-mode=importlib
+```
+
+### Docker Unavailable
+
+If Docker is not available, integration and contract tests are automatically skipped with a clear message:
+
+```
+SKIPPED [1] tests/integration/test_migrations.py::test_migrations_head_applied
+Docker/Testcontainers not available
+```
+
+### CI Configuration
+
+GitHub Actions example with Docker support:
+
+```yaml
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt -c constraints.txt
+      - name: Pre-pull Postgres image
+        run: docker pull postgres:16
+      - name: Run tests
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          pytest -q tests/unit --import-mode=importlib
+          pytest -q tests/integration --import-mode=importlib
+          pytest -q tests/contract --import-mode=importlib
+```
+
+### Test Architecture
+
+- **Unit tests**: Pure logic tests, no database required
+- **Integration tests**: Use Testcontainers PostgreSQL, test database interactions
+- **Contract tests**: Use Testcontainers PostgreSQL, test API contracts with real database
+- **Session fixtures**: Database container started once per test session
+- **Migration application**: Automatic `alembic upgrade head` on container startup

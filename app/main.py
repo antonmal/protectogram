@@ -12,19 +12,22 @@ from app.api import (
     telegram_router,
     telnyx_router,
 )
-from app.core import install_middlewares, settings, setup_logging
+from app.core import install_middlewares, setup_logging
+from app.core.settings import get_settings
 from app.scheduler.setup import shutdown_scheduler, start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager."""
+    settings = get_settings()
+    
     # Startup
     if settings.scheduler_enabled:
         await start_scheduler()
-
+    
     yield
-
+    
     # Shutdown
     if settings.scheduler_enabled:
         await shutdown_scheduler()
@@ -32,6 +35,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    settings = get_settings()
+    
     # Setup logging
     setup_logging()
 
@@ -51,12 +56,12 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(metrics_router)
-    app.include_router(telegram_router)
+    app.include_router(telegram_router, prefix="/telegram")
     app.include_router(telnyx_router)
     app.include_router(admin_router)
 
     return app
 
 
-# Create the app instance
+# Legacy compatibility - will be removed
 app = create_app()

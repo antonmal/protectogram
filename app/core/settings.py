@@ -1,34 +1,40 @@
 """Application settings and configuration."""
 
+from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _is_testing() -> bool:
+    """Check if we're running in a test environment."""
+    import sys
+    return "pytest" in sys.modules or any("test" in arg for arg in sys.argv)
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env" if not _is_testing() else None,  # Don't load .env in tests
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
 
     # Application
-    app_env: Literal["local", "staging", "prod"] = Field(
+    app_env: Literal["local", "staging", "prod", "test"] = Field(
         default="local", description="Application environment"
     )
     log_level: str = Field(default="INFO", description="Logging level")
 
     # Database URLs
-    # Runtime (web app / async ORM)
-    app_database_url: str | None = Field(default=None, description="Async database connection URL")
-    # Sync consumers (Alembic + APScheduler jobstore)
+    app_database_url: str | None = Field(
+        default=None, description="Async database connection URL"
+    )
     app_database_url_sync: str | None = Field(
         default=None, description="Sync database connection URL"
     )
-    # Alembic override (optional)
     alembic_database_url: str | None = Field(
         default=None, description="Alembic database URL override"
     )
@@ -50,10 +56,21 @@ class Settings(BaseSettings):
 
     # Telegram
     telegram_bot_token: str | None = Field(default=None, description="Telegram bot token")
+    telegram_webhook_secret: str | None = Field(
+        default=None, description="Telegram webhook secret token"
+    )
+    telegram_api_base: str = Field(
+        default="https://api.telegram.org", description="Telegram API base URL"
+    )
+    telegram_allowlist_chat_ids: str | None = Field(
+        default=None, description="Comma-separated list of allowed chat IDs"
+    )
 
     # Telnyx
     telnyx_api_key: str | None = Field(default=None, description="Telnyx API key")
-    telnyx_webhook_secret: str | None = Field(default=None, description="Telnyx webhook secret")
+    telnyx_webhook_secret: str | None = Field(
+        default=None, description="Telnyx webhook secret"
+    )
 
     @model_validator(mode="after")
     def validate_scheduler_config(self) -> "Settings":
@@ -68,5 +85,11 @@ class Settings(BaseSettings):
         return cls()
 
 
-# Global settings instance
-settings = Settings.from_env()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings.from_env()
+
+
+# Legacy compatibility - will be removed
+settings = get_settings()

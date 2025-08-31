@@ -9,10 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import Settings
 from app.integrations.telegram.client import TelegramClient
-from app.integrations.telegram.inbound import process_inbound
+from app.integrations.telegram.inbound import compute_provider_event_id, process_inbound
 from app.integrations.telegram.outbox import TelegramOutbox
-from app.integrations.telegram.parsing import compute_provider_event_id, extract_chat_id
-from app.integrations.telegram.security import verify_telegram_secret
 from app.observability.metrics import duplicate_inbox_dropped_total
 from app.storage.models import InboxEvent
 from app.storage.session import get_session
@@ -52,7 +50,10 @@ async def telegram_webhook(
     
     # Validate webhook secret
     secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-    if not verify_telegram_secret(secret_token, settings.telegram_webhook_secret or ""):
+    if not settings.telegram_webhook_secret:
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+    
+    if not secret_token or secret_token != settings.telegram_webhook_secret:
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
     
     # Parse request body
@@ -71,18 +72,17 @@ async def telegram_webhook(
         raise HTTPException(status_code=400, detail="Invalid update format") from e
     
     # Compute provider event ID
-    provider_event_id = compute_provider_event_id(body)  # Use raw JSON for parsing
+    provider_event_id = compute_provider_event_id(update)
     
     # Log correlation info
     correlation_id = getattr(request.state, "correlation_id", "-")
-    chat_id = extract_chat_id(body)  # Use raw JSON for parsing
     logger.info(
         "Processing Telegram webhook",
         extra={
             "correlation_id": correlation_id,
             "update_id": update.update_id,
             "provider_event_id": provider_event_id,
-            "chat_id": chat_id,
+            "chat_id": extract_chat_id(update),
         },
     )
     
@@ -158,4 +158,11 @@ async def telegram_webhook(
     return {"ok": True}
 
 
-
+def extract_chat_id(update: Any) -> int | None:
+    """Extract chat ID from update."""
+    if hasattr(update, 'message') and update.message:
+        return update.message.chat.id
+    elif (hasattr(update, 'callback_query') and update.callback_query 
+          and update.callback_query.message):
+        return update.callback_query.message.chat.id
+    return None

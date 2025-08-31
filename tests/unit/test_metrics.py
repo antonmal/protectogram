@@ -1,26 +1,20 @@
-"""Unit tests for metrics endpoint."""
-
-from typing import Any
+"""Unit tests for metrics."""
 
 import pytest
+from fastapi.testclient import TestClient
 
 
-@pytest.mark.asyncio
-async def test_metrics(async_client: Any) -> None:
-    """Test metrics endpoint."""
-    response = await async_client.get("/metrics")
-    assert response.status_code == 200
-    assert "text/plain" in response.headers["content-type"]
-    # Check that it contains some basic Prometheus metrics
-    content = response.text
-    assert "python_info" in content or "process_cpu_seconds" in content
-
-
-def test_metrics_sync(client: Any) -> None:
-    """Test metrics endpoint with sync client."""
+@pytest.mark.unit
+def test_metrics_endpoint(app):
+    """Test metrics endpoint returns Prometheus format."""
+    client = TestClient(app)
     response = client.get("/metrics")
+    
     assert response.status_code == 200
-    assert "text/plain" in response.headers["content-type"]
-    # Check that it contains some basic Prometheus metrics
+    assert response.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
+    
     content = response.text
-    assert "python_info" in content or "process_cpu_seconds" in content
+    # Check for expected metrics
+    assert "inbound_events_total" in content
+    assert "outbox_sent_total" in content
+    assert "outbox_errors_total" in content

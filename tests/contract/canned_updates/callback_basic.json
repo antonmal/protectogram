@@ -1,0 +1,41 @@
+{
+  "update_id": 123456791,
+  "callback_query": {
+    "id": "cbq-1",
+    "from": {
+      "id": 1111,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "testuser"
+    },
+    "message": {
+      "message_id": 3,
+      "from": {
+        "id": 123456789,
+        "is_bot": true,
+        "first_name": "TestBot",
+        "username": "testbot"
+      },
+      "chat": {
+        "id": 1111,
+        "first_name": "Test",
+        "username": "testuser",
+        "type": "private"
+      },
+      "date": 1640995200,
+      "text": "Test message with keyboard",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Test Button",
+              "callback_data": "test_callback"
+            }
+          ]
+        ]
+      }
+    },
+    "chat_instance": "123456789",
+    "data": "test_callback"
+  }
+}

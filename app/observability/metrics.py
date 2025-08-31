@@ -15,8 +15,29 @@ health_ready_checks_total = Counter(
     labelnames=["result", "reason"],
 )
 
-# Domain metrics (declared but not used yet)
+# Inbound events metrics
+inbound_events_total = Counter(
+    name="inbound_events_total",
+    documentation="Inbound events by provider/type",
+    labelnames=["provider", "type"],
+)
+
+# Duplicate events metrics
 duplicate_inbox_dropped_total = Counter(
     name="duplicate_inbox_dropped_total",
-    documentation="Total number of duplicate inbox messages dropped",
+    documentation="Duplicates dropped",
+    labelnames=["provider"],
+)
+
+# Outbox metrics
+outbox_sent_total = Counter(
+    name="outbox_sent_total",
+    documentation="Outbox messages sent",
+    labelnames=["channel"],
+)
+
+outbox_errors_total = Counter(
+    name="outbox_errors_total",
+    documentation="Outbox errors",
+    labelnames=["channel"],
 )

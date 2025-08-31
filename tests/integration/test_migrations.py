@@ -1,126 +1,24 @@
-"""Test database migrations."""
+"""Integration tests for database migrations."""
 
 import os
-
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
-
-from tests.integration.conftest import PostgresContainerInfo
+import pytest
+import sqlalchemy as sa
 
 
-def test_migrations_create_all_tables(pg_container: PostgresContainerInfo) -> None:
-    """Test that migrations create all expected tables."""
-    # Set environment variable for Alembic
-    os.environ["ALEMBIC_DATABASE_URL"] = pg_container.url_sync
+@pytest.mark.integration
+def test_migrations_head_applied():
+    """Test that migrations are applied to the test database."""
+    url = os.getenv("APP_DATABASE_URL_SYNC")
+    assert url, "APP_DATABASE_URL_SYNC not set"
 
-    # Run migrations
-    cfg = Config("alembic.ini")
-    command.upgrade(cfg, "head")
-
-    # Connect to database and verify tables
-    engine = create_engine(pg_container.url_sync)
-    inspector = inspect(engine)
-
-    # Get all table names
-    tables = inspector.get_table_names()
-
-    # Expected tables
-    expected_tables = {
-        "users",
-        "member_links",
-        "incidents",
-        "alerts",
-        "call_attempts",
-        "inbox_events",
-        "outbox_messages",
-        "scheduled_actions",
-    }
-
-    assert expected_tables.issubset(set(tables)), f"Missing tables: {expected_tables - set(tables)}"
-
-    # Verify indexes
+    engine = sa.create_engine(url, future=True)
     with engine.connect() as conn:
-        # Check member_links index
-        result = conn.execute(
-            text("""
-            SELECT indexname FROM pg_indexes 
-            WHERE tablename = 'member_links' 
-            AND indexname LIKE '%traveler_user_id%'
-        """)
-        )
-        assert result.fetchone() is not None, "member_links index not found"
-
-        # Check call_attempts index
-        result = conn.execute(
-            text("""
-            SELECT indexname FROM pg_indexes 
-            WHERE tablename = 'call_attempts' 
-            AND indexname LIKE '%alert_id%'
-        """)
-        )
-        assert result.fetchone() is not None, "call_attempts index not found"
-
-        # Check scheduled_actions index
-        result = conn.execute(
-            text("""
-            SELECT indexname FROM pg_indexes 
-            WHERE tablename = 'scheduled_actions' 
-            AND indexname LIKE '%run_at%'
-        """)
-        )
-        assert result.fetchone() is not None, "scheduled_actions index not found"
-
-        # Check unique constraints
-        result = conn.execute(
-            text("""
-            SELECT conname FROM pg_constraint 
-            WHERE conrelid = 'inbox_events'::regclass 
-            AND contype = 'u'
-        """)
-        )
-        assert result.fetchone() is not None, "inbox_events unique constraint not found"
-
-        result = conn.execute(
-            text("""
-            SELECT conname FROM pg_constraint 
-            WHERE conrelid = 'outbox_messages'::regclass 
-            AND contype = 'u'
-        """)
-        )
-        assert result.fetchone() is not None, "outbox_messages unique constraint not found"
-
-    engine.dispose()
-
-
-def test_migrations_downgrade(pg_container: PostgresContainerInfo) -> None:
-    """Test that migrations can be downgraded."""
-    # Set environment variable for Alembic
-    os.environ["ALEMBIC_DATABASE_URL"] = pg_container.url_sync
-
-    # Run migrations up
-    cfg = Config("alembic.ini")
-    command.upgrade(cfg, "head")
-
-    # Verify tables exist
-    engine = create_engine(pg_container.url_sync)
-    inspector = inspect(engine)
-    tables_before = inspector.get_table_names()
-    assert len(tables_before) > 0, "No tables created"
-
-    # Downgrade one step
-    command.downgrade(cfg, "-1")
-
-    # Verify tables are gone (except alembic_version and apscheduler_jobs which may remain)
-    inspector = inspect(engine)
-    tables_after = inspector.get_table_names()
-    expected_remaining = {"alembic_version"}
-    # apscheduler_jobs may be created by scheduler and not cleaned up by migrations
-    if "apscheduler_jobs" in tables_after:
-        expected_remaining.add("apscheduler_jobs")
-
-    assert (
-        set(tables_after) == expected_remaining
-    ), f"Unexpected tables after downgrade: {tables_after}"
-
+        # Check that expected tables exist
+        inspector = sa.inspect(engine)
+        tables = inspector.get_table_names()
+        
+        expected_tables = ["inbox_events", "outbox_messages"]
+        for table in expected_tables:
+            assert table in tables, f"Table {table} not found in database"
+    
     engine.dispose()

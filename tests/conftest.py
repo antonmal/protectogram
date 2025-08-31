@@ -1,25 +1,17 @@
-"""Pytest configuration and fixtures."""
+"""Global test configuration."""
 
-from collections.abc import AsyncGenerator
-
-import httpx
 import pytest
-import pytest_asyncio
-from fastapi.testclient import TestClient
-
-from app.main import create_app
+from app.core.settings import get_settings
 
 
-@pytest.fixture
-def client() -> TestClient:
-    """Create a test client."""
-    app = create_app()
-    return TestClient(app)
+def reset_settings_cache():
+    """Reset the settings cache to pick up new environment variables."""
+    get_settings.cache_clear()
 
 
-@pytest_asyncio.fixture
-async def async_client() -> AsyncGenerator[httpx.AsyncClient, None]:
-    app = create_app()
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_test_environment():
+    """Ensure we're in a test environment."""
+    import os
+    os.environ.setdefault("APP_ENV", "test")
+    os.environ.setdefault("SCHEDULER_ENABLED", "false")

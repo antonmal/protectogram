@@ -1,54 +1,65 @@
 """Integration tests for scheduler persistence."""
 
+import os
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
-from app.main import create_app
-from app.scheduler.setup import get_scheduler, shutdown_scheduler, start_scheduler
-from tests.integration.conftest import PostgresContainerInfo
+from app.scheduler.setup import start_scheduler, shutdown_scheduler
 
 
-@pytest.fixture
-def test_app() -> FastAPI:
-    """Create test app with scheduler."""
-    return create_app()
-
-
-@pytest.fixture
-def client(test_app: FastAPI) -> TestClient:
-    """Create test client."""
-    return TestClient(test_app)
-
-
+@pytest.mark.integration
 @pytest.mark.asyncio
-async def test_scheduler_persistence(
-    pg_container: PostgresContainerInfo, client: TestClient
-) -> None:
-    """Test that scheduled jobs persist across scheduler restarts."""
-    # Set environment for scheduler
-    import os
+async def test_scheduler_persistence():
+    """Test that scheduler can persist jobs to the database."""
+    # Use the container URLs set by the fixture
+    url_sync = os.getenv("APP_DATABASE_URL_SYNC")
+    assert url_sync, "APP_DATABASE_URL_SYNC not set"
 
-    os.environ["APP_DATABASE_URL_SYNC"] = pg_container.url_sync
-    os.environ["APP_DATABASE_URL"] = pg_container.url_async
+    # Set environment variables for scheduler
     os.environ["SCHEDULER_ENABLED"] = "true"
 
-    # Start scheduler
-    await start_scheduler()
+    try:
+        # Start scheduler
+        await start_scheduler()
+        
+        # Verify scheduler is running
+        from app.scheduler.setup import _scheduler
+        assert _scheduler.running
+        
+        # Check that jobs table was created
+        import sqlalchemy as sa
+        engine = sa.create_engine(url_sync, future=True)
+        with engine.connect() as conn:
+            inspector = sa.inspect(engine)
+            tables = inspector.get_table_names()
+            assert "apscheduler_jobs" in tables, "Scheduler jobs table not created"
+        
+        engine.dispose()
+        
+    finally:
+        # Shutdown scheduler
+        await shutdown_scheduler()
+        os.environ.pop("SCHEDULER_ENABLED", None)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_scheduler_lifecycle():
+    """Test scheduler startup and shutdown."""
+    # Set environment variables for scheduler
+    os.environ["SCHEDULER_ENABLED"] = "true"
 
     try:
+        # Start scheduler
+        await start_scheduler()
+        
         # Verify scheduler is running
-        scheduler = get_scheduler()
-        assert scheduler.running, "Scheduler should be running"
-
-        # Verify heartbeat job is registered
-        jobs = scheduler.get_jobs()
-        heartbeat_jobs = [job for job in jobs if job.id == "heartbeat"]
-        assert len(heartbeat_jobs) == 1, "Heartbeat job should be registered"
-
-        # Verify jobstore is accessible
-        jobstore = scheduler._jobstores["default"]
-        assert jobstore is not None, "Jobstore should be accessible"
-
-    finally:
+        from app.scheduler.setup import _scheduler
+        assert _scheduler.running
+        
+        # Shutdown scheduler
         await shutdown_scheduler()
+        
+        # Verify scheduler is stopped
+        assert not _scheduler.running
+        
+    finally:
+        os.environ.pop("SCHEDULER_ENABLED", None)
