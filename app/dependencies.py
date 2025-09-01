@@ -3,12 +3,13 @@ FastAPI dependencies for Protectogram v3.1.
 Provides dependency injection for settings, database, and services.
 """
 
-from typing import Annotated, Generator
+from typing import Annotated, AsyncGenerator
 from fastapi import Depends, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import BaseAppSettings
-from app.database import get_database_session
+from app.database import get_async_db
+from app.services.user import UserService
 
 
 def get_settings(request: Request) -> BaseAppSettings:
@@ -24,22 +25,18 @@ def get_settings(request: Request) -> BaseAppSettings:
     return request.app.state.settings
 
 
-def get_database(request: Request) -> Generator[Session, None, None]:
+async def get_database(request: Request) -> AsyncGenerator[AsyncSession, None]:
     """
-    Get database session with proper cleanup.
+    Get async database session with proper cleanup.
 
     Args:
         request: FastAPI request object.
 
     Yields:
-        SQLAlchemy database session.
+        SQLAlchemy async database session.
     """
-    engine = request.app.state.engine
-    session = get_database_session(engine)
-    try:
+    async for session in get_async_db():
         yield session
-    finally:
-        session.close()
 
 
 def get_communication_manager(request: Request):
@@ -69,9 +66,21 @@ def get_telegram_client(request: Request):
 
 
 # Service dependencies with proper injection
+def get_user_service(
+    db: Annotated[AsyncSession, Depends(get_database)],
+) -> UserService:
+    """
+    Get user service with database session injected.
+
+    Returns:
+        User service instance.
+    """
+    return UserService(db=db)
+
+
 def get_panic_service(
     request: Request,
-    db: Annotated[Session, Depends(get_database)],
+    db: Annotated[AsyncSession, Depends(get_database)],
     settings: Annotated[BaseAppSettings, Depends(get_settings)],
     communication_manager=Depends(get_communication_manager),
     telegram_client=Depends(get_telegram_client),
@@ -94,7 +103,7 @@ def get_panic_service(
 
 def get_trip_service(
     request: Request,
-    db: Annotated[Session, Depends(get_database)],
+    db: Annotated[AsyncSession, Depends(get_database)],
     settings: Annotated[BaseAppSettings, Depends(get_settings)],
     communication_manager=Depends(get_communication_manager),
     telegram_client=Depends(get_telegram_client),
@@ -117,7 +126,7 @@ def get_trip_service(
 
 def get_guardian_service(
     request: Request,
-    db: Annotated[Session, Depends(get_database)],
+    db: Annotated[AsyncSession, Depends(get_database)],
     settings: Annotated[BaseAppSettings, Depends(get_settings)],
     communication_manager=Depends(get_communication_manager),
     telegram_client=Depends(get_telegram_client),
@@ -140,7 +149,7 @@ def get_guardian_service(
 
 def get_notification_service(
     request: Request,
-    db: Annotated[Session, Depends(get_database)],
+    db: Annotated[AsyncSession, Depends(get_database)],
     settings: Annotated[BaseAppSettings, Depends(get_settings)],
     communication_manager=Depends(get_communication_manager),
 ):
@@ -159,7 +168,7 @@ def get_notification_service(
 
 # Type aliases for cleaner code
 SettingsDep = Annotated[BaseAppSettings, Depends(get_settings)]
-DatabaseDep = Annotated[Session, Depends(get_database)]
+DatabaseDep = Annotated[AsyncSession, Depends(get_database)]
 CommunicationDep = Annotated[object, Depends(get_communication_manager)]
 TelegramDep = Annotated[object, Depends(get_telegram_client)]
 PanicServiceDep = Annotated[object, Depends(get_panic_service)]

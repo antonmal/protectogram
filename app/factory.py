@@ -93,12 +93,10 @@ def setup_routes(app: FastAPI, settings: BaseAppSettings):
             "redoc": "/redoc",
         }
 
-    # TODO: Add actual API routers
-    # from app.api.v1 import panic, trips, guardians, users
-    # app.include_router(panic.router, prefix="/api/v1/panic", tags=["panic"])
-    # app.include_router(trips.router, prefix="/api/v1/trips", tags=["trips"])
-    # app.include_router(guardians.router, prefix="/api/v1/guardians", tags=["guardians"])
-    # app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+    # Include API routers
+    from app.api import api_router
+
+    app.include_router(api_router)
 
     # TODO: Add webhook routers
     # from app.api.webhooks import telegram, twilio

@@ -28,6 +28,30 @@ class User(BaseModel):
         comment="Telegram user ID for bot integration",
     )
 
+    telegram_username = Column(
+        String(100),
+        nullable=True,
+        comment="Telegram username (without @)",
+    )
+
+    first_name = Column(
+        String(100),
+        nullable=False,
+        comment="User's first name",
+    )
+
+    last_name = Column(
+        String(100),
+        nullable=True,
+        comment="User's last name",
+    )
+
+    email = Column(
+        String(255),
+        nullable=True,
+        comment="User's email address",
+    )
+
     phone_number = Column(
         String(20),
         nullable=False,
@@ -37,18 +61,11 @@ class User(BaseModel):
 
     gender: Gender = Column(SQLEnum(Gender), nullable=False, comment="User gender")
 
-    language = Column(
+    preferred_language = Column(
         String(5),
         nullable=False,
-        default="ru",
+        default="en",
         comment="User preferred language (ISO 639-1)",
-    )
-
-    timezone = Column(
-        String(50),
-        nullable=False,
-        default="Europe/Madrid",
-        comment="User timezone (tz database name)",
     )
 
     # Relationships
