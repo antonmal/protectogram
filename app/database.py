@@ -8,7 +8,7 @@ from app.models.base import Base
 import os
 
 # Get settings using factory pattern
-environment = os.getenv('ENVIRONMENT', 'development')
+environment = os.getenv("ENVIRONMENT", "development")
 settings = SettingsFactory.create(environment)
 
 # Async engine for FastAPI
@@ -21,7 +21,7 @@ async_engine = create_async_engine(
 
 # Async session factory
 AsyncSessionLocal = sessionmaker(
-    bind=async_engine,
+    async_engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )

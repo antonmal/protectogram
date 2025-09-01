@@ -76,7 +76,7 @@ touch app/integrations/telegram/keyboards.py
 
 # Create task files (SEPARATED by context - CRITICAL for v3.1)
 touch app/tasks/panic_alerts.py      # ONLY panic-related tasks
-touch app/tasks/trip_reminders.py    # ONLY trip-related tasks  
+touch app/tasks/trip_reminders.py    # ONLY trip-related tasks
 touch app/tasks/notifications.py     # General notification tasks
 touch app/tasks/cleanup.py           # Maintenance tasks
 
@@ -102,14 +102,14 @@ echo "✅ Project structure created successfully!"
 echo ""
 echo "📂 Key Architecture Components Created:"
 echo "   🚨 app/services/panic.py - Independent panic logic"
-echo "   🛣️  app/services/trip.py - Independent trip logic" 
+echo "   🛣️  app/services/trip.py - Independent trip logic"
 echo "   ⚙️  app/config/settings.py - Settings factory pattern"
 echo "   📡 app/tasks/panic_alerts.py - Panic-specific tasks"
 echo "   📡 app/tasks/trip_reminders.py - Trip-specific tasks"
 echo ""
 echo "🎯 Next steps:"
 echo "1. Set up Python virtual environment"
-echo "2. Install dependencies" 
+echo "2. Install dependencies"
 echo "3. Configure environment variables (4 environments)"
 echo "4. Initialize database with separation schema"
 echo "5. Test panic + trip separation logic"

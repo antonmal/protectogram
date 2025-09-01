@@ -2,10 +2,11 @@
 import sys
 import importlib
 
+
 def check_package(name, required_version=None):
     try:
-        module = importlib.import_module(name.split('[')[0])
-        version = getattr(module, '__version__', 'unknown')
+        module = importlib.import_module(name.split("[")[0])
+        version = getattr(module, "__version__", "unknown")
         status = "✓"
         if required_version and version != required_version:
             status = f"⚠️  (got {version}, expected {required_version})"
@@ -15,11 +16,12 @@ def check_package(name, required_version=None):
         print(f"{name:30} {'MISSING':10} ❌ - {e}")
         return False
 
+
 print(f"Python Version: {sys.version}")
 print(f"Python Path: {sys.executable}")
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("Package Verification:")
-print("="*50)
+print("=" * 50)
 
 packages = [
     ("fastapi", "0.115.0"),

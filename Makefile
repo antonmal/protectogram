@@ -133,16 +133,16 @@ test-speed: ## Test panic button response time
 	@echo "✅ Speed test completed"
 
 # Code quality
-lint: ## Run linting (flake8, mypy)
+lint: ## Run linting (ruff, mypy)
 	@echo "Running linting..."
-	@$(PYTHON_VENV) -m flake8 app tests
+	@$(PYTHON_VENV) -m ruff check app tests
 	@$(PYTHON_VENV) -m mypy app
 	@echo "✅ Linting completed"
 
-format: ## Format code with black
+format: ## Format code with ruff
 	@echo "Formatting code..."
-	@$(PYTHON_VENV) -m black app tests scripts
-	@$(PYTHON_VENV) -m isort app tests scripts
+	@$(PYTHON_VENV) -m ruff format app tests scripts
+	@$(PYTHON_VENV) -m ruff check --fix app tests scripts
 	@echo "✅ Code formatted"
 
 security: ## Run security audit
@@ -161,7 +161,7 @@ deploy-staging: test ## Deploy to staging environment
 	@fly deploy --config fly.staging.toml --build-arg ENVIRONMENT=staging
 	@echo "✅ Deployed to staging"
 
-deploy-prod: test ## Deploy to production environment  
+deploy-prod: test ## Deploy to production environment
 	@echo "Deploying to production..."
 	@fly deploy --config fly.toml --build-arg ENVIRONMENT=production
 	@echo "✅ Deployed to production"

@@ -34,7 +34,7 @@ primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
   cpu_kind = 'shared'
   cpus = 1
 
-# Celery worker process  
+# Celery worker process
 [[vm]]
   memory = '512mb'
   cpu_kind = 'shared'
@@ -43,7 +43,7 @@ primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
 
 # Celery beat process
 [[vm]]
-  memory = '256mb'  
+  memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1
   processes = ["beat"]
@@ -60,7 +60,7 @@ primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
 # - REDIS_URL (Upstash Redis)
 # - TELEGRAM_BOT_TOKEN
 # - TWILIO_ACCOUNT_SID
-# - TWILIO_AUTH_TOKEN  
+# - TWILIO_AUTH_TOKEN
 # - TWILIO_FROM_NUMBER
 # - SECRET_KEY
 # - WEBHOOK_SECRET

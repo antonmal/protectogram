@@ -11,7 +11,7 @@ __all__ = [
     "Base",
     "BaseModel",
     "User",
-    "Guardian", 
+    "Guardian",
     "UserGuardian",
     "Panic",
     "Trip",

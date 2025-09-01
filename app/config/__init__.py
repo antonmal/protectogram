@@ -8,16 +8,16 @@ from app.config.settings import (
     ProductionSettings,
     SettingsFactory,
     get_settings,
-    get_cached_settings
+    get_cached_settings,
 )
 
 __all__ = [
-    'BaseAppSettings',
-    'DevelopmentSettings',
-    'TestSettings',
-    'StagingSettings',
-    'ProductionSettings',
-    'SettingsFactory',
-    'get_settings',
-    'get_cached_settings'
+    "BaseAppSettings",
+    "DevelopmentSettings",
+    "TestSettings",
+    "StagingSettings",
+    "ProductionSettings",
+    "SettingsFactory",
+    "get_settings",
+    "get_cached_settings",
 ]

@@ -108,7 +108,7 @@ Four environments with specific configurations:
 
 Development requires `.env.development` with:
 - `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string  
+- `REDIS_URL` - Redis connection string
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` - Twilio credentials
 

@@ -1,7 +1,7 @@
 """Create application tables: users, guardians, user_guardians, panic_events, trips
 
 Revision ID: ae42b859e4e0
-Revises: 
+Revises:
 Create Date: 2025-09-01 19:42:16.820288
 
 """

@@ -24,7 +24,7 @@ primary_region = "cdg"  # Paris
 [[http_service.checks]]
   grace_period = "10s"
   interval = "60s"
-  method = "GET" 
+  method = "GET"
   timeout = "10s"
   path = "/health"
 

@@ -7,12 +7,12 @@ from sqlalchemy import pool
 
 from alembic import context
 
+# Import models and settings using factory pattern
+from app.config.settings import SettingsFactory
+from app.models import Base
+
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-# Import models and settings using factory pattern
-from app.models import Base
-from app.config.settings import SettingsFactory
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -24,7 +24,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Get database URL from settings factory
-environment = os.getenv('ENVIRONMENT', 'development')
+environment = os.getenv("ENVIRONMENT", "development")
 settings = SettingsFactory.create(environment)
 # Use sync URL for migrations (remove +asyncpg)
 database_url = settings.database_url.replace("+asyncpg", "")
@@ -44,14 +44,43 @@ def include_object(object, name, type_, reflected, compare_to):
     """Only include objects that are part of our application models."""
     # Ignore PostGIS and TIGER geocoder tables
     if type_ == "table" and name in [
-        'zip_lookup', 'tabblock20', 'cousub', 'addrfeat', 'zcta5', 'featnames',
-        'place', 'pagc_rules', 'zip_lookup_base', 'place_lookup', 'zip_state_loc',
-        'pagc_gaz', 'tabblock', 'bg', 'direction_lookup', 'secondary_unit_lookup',
-        'layer', 'faces', 'topology', 'addr', 'county', 'street_type_lookup',
-        'loader_variables', 'state', 'loader_lookuptables', 'zip_state', 'tract',
-        'county_lookup', 'state_lookup', 'zip_lookup_all', 'spatial_ref_sys',
-        'countysub_lookup', 'geocode_settings', 'pagc_lex', 'loader_platform',
-        'edges', 'geocode_settings_default'
+        "zip_lookup",
+        "tabblock20",
+        "cousub",
+        "addrfeat",
+        "zcta5",
+        "featnames",
+        "place",
+        "pagc_rules",
+        "zip_lookup_base",
+        "place_lookup",
+        "zip_state_loc",
+        "pagc_gaz",
+        "tabblock",
+        "bg",
+        "direction_lookup",
+        "secondary_unit_lookup",
+        "layer",
+        "faces",
+        "topology",
+        "addr",
+        "county",
+        "street_type_lookup",
+        "loader_variables",
+        "state",
+        "loader_lookuptables",
+        "zip_state",
+        "tract",
+        "county_lookup",
+        "state_lookup",
+        "zip_lookup_all",
+        "spatial_ref_sys",
+        "countysub_lookup",
+        "geocode_settings",
+        "pagc_lex",
+        "loader_platform",
+        "edges",
+        "geocode_settings_default",
     ]:
         return False
     return True
@@ -97,7 +126,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
             include_object=include_object,
         )
