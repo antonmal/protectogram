@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.user import Gender
 
@@ -17,7 +17,8 @@ class UserBase(BaseModel):
     preferred_language: str = Field("en", pattern=r"^(en|ru|es)$")
     gender: Optional[Gender] = None
 
-    @validator("phone_number")
+    @field_validator("phone_number")
+    @classmethod
     def validate_phone_number(cls, v):
         if v and not v.startswith("+"):
             raise ValueError("Phone number must start with +")
@@ -37,7 +38,8 @@ class UserUpdate(BaseModel):
     preferred_language: Optional[str] = Field(None, pattern=r"^(en|ru|es)$")
     gender: Optional[Gender] = None
 
-    @validator("phone_number")
+    @field_validator("phone_number")
+    @classmethod
     def validate_phone_number(cls, v):
         if v and not v.startswith("+"):
             raise ValueError("Phone number must start with +")

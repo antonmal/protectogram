@@ -5,7 +5,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.auth import get_current_user
 from app.dependencies import get_user_service
+from app.models.user import User
 from app.schemas.user import (
     UserCreate,
     UserListResponse,
@@ -41,7 +43,7 @@ async def register_user(
     """
     try:
         user = await user_service.create(user_data)
-        return UserResponse.from_orm(user)
+        return UserResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -61,7 +63,7 @@ async def get_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.get(
@@ -79,7 +81,7 @@ async def get_user_by_telegram_id(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.put(
@@ -91,14 +93,22 @@ async def update_user(
     user_id: UUID,
     user_data: UserUpdate,
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """Update user information."""
+    """Update user information. Users can only update their own profile."""
+    # Authorization: users can only update their own profile
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile",
+        )
+
     user = await user_service.update(user_id, user_data)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.delete(
@@ -109,8 +119,16 @@ async def update_user(
 async def delete_user(
     user_id: UUID,
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """Delete a user (hard delete - removes from database)."""
+    """Delete a user (hard delete - removes from database). Users can only delete their own account."""
+    # Authorization: users can only delete their own account
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own account",
+        )
+
     success = await user_service.delete(user_id)
     if not success:
         raise HTTPException(
@@ -125,6 +143,7 @@ async def delete_user(
 )
 async def list_users(
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(50, ge=1, le=100, description="Items per page"),
 ):
@@ -140,7 +159,7 @@ async def list_users(
     total = await user_service.count_users()
 
     return UserListResponse(
-        users=[UserResponse.from_orm(user) for user in users],
+        users=[UserResponse.model_validate(user) for user in users],
         total=total,
         page=page,
         per_page=per_page,

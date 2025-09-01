@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import BaseAppSettings
 from app.database import get_async_db
+from app.services.guardian import GuardianService
 from app.services.user import UserService
+from app.services.user_guardian import UserGuardianService
 
 
 def get_settings(request: Request) -> BaseAppSettings:
@@ -78,6 +80,30 @@ def get_user_service(
     return UserService(db=db)
 
 
+def get_guardian_service(
+    db: Annotated[AsyncSession, Depends(get_database)],
+) -> GuardianService:
+    """
+    Get guardian service with database session injected.
+
+    Returns:
+        Guardian service instance.
+    """
+    return GuardianService(db=db)
+
+
+def get_user_guardian_service(
+    db: Annotated[AsyncSession, Depends(get_database)],
+) -> UserGuardianService:
+    """
+    Get user guardian service with database session injected.
+
+    Returns:
+        User guardian service instance.
+    """
+    return UserGuardianService(db=db)
+
+
 def get_panic_service(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_database)],
@@ -117,29 +143,6 @@ def get_trip_service(
     from app.services.trip import TripService
 
     return TripService(
-        db=db,
-        settings=settings,
-        communication_manager=communication_manager,
-        telegram_client=telegram_client,
-    )
-
-
-def get_guardian_service(
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_database)],
-    settings: Annotated[BaseAppSettings, Depends(get_settings)],
-    communication_manager=Depends(get_communication_manager),
-    telegram_client=Depends(get_telegram_client),
-):
-    """
-    Get guardian service with all dependencies injected.
-
-    Returns:
-        Guardian service instance with proper dependency injection.
-    """
-    from app.services.guardian import GuardianService
-
-    return GuardianService(
         db=db,
         settings=settings,
         communication_manager=communication_manager,
