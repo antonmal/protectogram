@@ -1,0 +1,43 @@
+# Production requirements for Protectogram v3.1
+# This file consolidates base requirements for Docker deployment
+
+# Core Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# Database & ORM - PostgreSQL with PostGIS
+sqlalchemy==2.0.35
+asyncpg==0.29.0
+alembic==1.13.2
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+
+# Telegram Bot API
+python-telegram-bot==21.5
+
+# Communication - Twilio
+twilio==9.2.4
+
+# Background Tasks & Caching
+celery==5.3.4
+redis==5.1.1
+
+# Database Migrations
+psycopg2-binary==2.9.9
+
+# Date/Time
+python-dateutil==2.9.0.post0
+
+# HTTP Client
+httpx==0.27.2
+
+# Logging & Monitoring
+sentry-sdk[fastapi]==2.14.0
+
+# Production server
+gunicorn==23.0.0

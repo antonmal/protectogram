@@ -69,6 +69,23 @@ def create_app(settings: Optional[BaseAppSettings] = None) -> FastAPI:
     return app
 
 
+# Environment-specific app factory functions for deployment
+def create_staging_app() -> FastAPI:
+    """Create staging app instance."""
+    from app.config.settings import SettingsFactory
+
+    settings = SettingsFactory.create("staging")
+    return create_app(settings)
+
+
+def create_production_app() -> FastAPI:
+    """Create production app instance."""
+    from app.config.settings import SettingsFactory
+
+    settings = SettingsFactory.create("production")
+    return create_app(settings)
+
+
 def setup_middleware(app: FastAPI, settings: BaseAppSettings):
     """Configure application middleware."""
 
