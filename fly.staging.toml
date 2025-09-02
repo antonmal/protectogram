@@ -3,6 +3,8 @@ app = "protectogram-staging"
 primary_region = "cdg"  # Paris
 
 [build]
+  [build.args]
+    ENV = "staging"
 
 [env]
   ENVIRONMENT = "staging"

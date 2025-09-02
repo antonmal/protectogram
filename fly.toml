@@ -3,6 +3,8 @@ app = "protectogram"
 primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
 
 [build]
+  [build.args]
+    ENV = "prod"
 
 [env]
   ENVIRONMENT = "production"

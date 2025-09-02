@@ -1,0 +1,13 @@
+-r base.txt
+
+# Production-specific packages
+# Optimized for performance and minimal footprint
+
+# Production server (alternative to uvicorn for better performance)
+gunicorn==23.0.0
+
+# Performance monitoring (lightweight)
+psutil==6.1.0  # System monitoring only
+
+# Production-optimized JSON processing (already in base.txt but emphasized)
+# orjson==3.10.7  # Already in base.txt - fastest JSON library
