@@ -11,9 +11,9 @@ primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = false
-  auto_start_machines = true
-  min_machines_running = 1
+  auto_stop_machines = false  # Never suspend - safety-critical app
+  auto_start_machines = true   # For scaling additional machines
+  min_machines_running = 1     # Always available for emergencies
   processes = ["app"]
 
   [http_service.concurrency]
@@ -28,31 +28,15 @@ primary_region = "cdg"  # Paris - optimal for Spain/Russia latency
   timeout = "5s"
   path = "/health"
 
-# Web application process
+# Production VMs - more powerful than staging
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 1
-
-# Celery worker process
-[[vm]]
-  memory = '512mb'
-  cpu_kind = 'shared'
-  cpus = 1
-  processes = ["worker"]
-
-# Celery beat process
-[[vm]]
-  memory = '256mb'
-  cpu_kind = 'shared'
-  cpus = 1
-  processes = ["beat"]
+  cpus = 2
 
 # Process definitions
 [processes]
   app = "python -m uvicorn app.factory:create_production_app --factory --host 0.0.0.0 --port 8000"
-  worker = "celery -A app.celery_app worker --loglevel=info --queues=panic_alerts,trip_reminders,notifications,default --concurrency=2"
-  beat = "celery -A app.celery_app beat --loglevel=info"
 
 # Secrets (set with: flyctl secrets set KEY=VALUE)
 # Required secrets:

@@ -83,6 +83,20 @@ class TelegramClient:
                 f"Processing /start command from user {user.id} ({user.first_name})"
             )
 
+            # Check if user already exists in database
+            if self.onboarding_service:
+                try:
+                    existing_user = (
+                        await self.onboarding_service.get_user_by_telegram_id(user.id)
+                    )
+                    if existing_user:
+                        # User exists - show main menu
+                        await self._show_existing_user_menu(update, existing_user)
+                        return
+                except Exception as e:
+                    logger.info(f"User {user.id} not found in database: {e}")
+
+            # User doesn't exist - show registration flow
             welcome_text = f"""
 🛡️ **Welcome to Protectogram, {user.first_name}!**
 
@@ -124,6 +138,50 @@ Use /register to create your account or /help for more options.
                 )
             except Exception as simple_error:
                 logger.error(f"Even simple message failed: {simple_error}")
+
+    async def _show_existing_user_menu(self, update: Update, user_data) -> None:
+        """Show main menu for existing registered users."""
+        user = update.effective_user
+
+        welcome_back_text = f"""
+🛡️ **Welcome back, {user_data.first_name}!**
+
+Your Protectogram account is active and ready.
+
+**Quick Actions:**
+• 🚨 **Panic Button** - Immediate emergency alert
+• 👥 **Guardians** - Manage your safety network
+• 📱 **Profile** - Update your information
+• 🗺️ **Trip** - Start a new safe journey
+
+**Account Status:** ✅ Active
+**Guardians:** {await self._get_guardian_count(user.id)} connected
+        """
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🚨 PANIC", callback_data="panic_button"),
+                InlineKeyboardButton("👥 Guardians", callback_data="manage_guardians"),
+            ],
+            [
+                InlineKeyboardButton("📱 Profile", callback_data="view_profile"),
+                InlineKeyboardButton("🗺️ New Trip", callback_data="start_trip"),
+            ],
+            [InlineKeyboardButton("ℹ️ Help", callback_data="get_help")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            welcome_back_text, reply_markup=reply_markup, parse_mode="Markdown"
+        )
+
+    async def _get_guardian_count(self, telegram_user_id: int) -> int:
+        """Get number of guardians for user."""
+        try:
+            guardians = await self._get_user_guardians(telegram_user_id)
+            return len(guardians) if guardians else 0
+        except Exception:
+            return 0
 
     async def help_command(self, update: Update, context) -> None:
         """Handle /help command."""
@@ -293,6 +351,30 @@ Guardians are trusted contacts who will be alerted if you trigger a panic button
             await self._handle_gender_selection(query, data.split("_")[1])
         elif data.startswith("lang_"):
             await self._handle_language_selection(query, data.split("_")[1])
+        elif data == "manage_guardians":
+            # Convert query to fake update for guardians_command
+            fake_update = type(
+                "obj",
+                (object,),
+                {"message": query.message, "effective_user": query.from_user},
+            )()
+            await self.guardians_command(fake_update, None)
+        elif data == "view_profile":
+            # Convert query to fake update for profile_command
+            fake_update = type(
+                "obj",
+                (object,),
+                {"message": query.message, "effective_user": query.from_user},
+            )()
+            await self.profile_command(fake_update, None)
+        elif data == "panic_button":
+            await query.edit_message_text(
+                "🚨 **PANIC BUTTON** - This feature will trigger emergency alerts to all your guardians. Implementation coming soon!"
+            )
+        elif data == "start_trip":
+            await query.edit_message_text(
+                "🗺️ **Trip Tracking** - Safe journey monitoring feature coming soon!"
+            )
         else:
             await query.edit_message_text("This feature is coming soon! 🚧")
 

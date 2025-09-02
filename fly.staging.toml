@@ -11,9 +11,9 @@ primary_region = "cdg"  # Paris
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true  # Save costs in staging
-  auto_start_machines = true
-  min_machines_running = 0
+  auto_stop_machines = false  # Keep running for webhook reliability
+  auto_start_machines = true   # For scaling additional machines
+  min_machines_running = 1     # Always have 1 machine for webhooks
   processes = ["app"]
 
   [http_service.concurrency]
