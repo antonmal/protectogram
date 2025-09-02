@@ -12,6 +12,7 @@ from app.database import get_async_db
 from app.services.guardian import GuardianService
 from app.services.user import UserService
 from app.services.user_guardian import UserGuardianService
+from app.services.telegram_onboarding import TelegramOnboardingService
 
 
 def get_settings(request: Request) -> BaseAppSettings:
@@ -65,6 +66,27 @@ def get_telegram_client(request: Request):
         Telegram bot client instance.
     """
     return request.app.state.telegram_client
+
+
+def get_telegram_onboarding_service(
+    db: Annotated[AsyncSession, Depends(get_database)],
+) -> TelegramOnboardingService:
+    """
+    Get Telegram onboarding service with all required services injected.
+
+    Returns:
+        TelegramOnboardingService instance.
+    """
+    user_service = UserService(db=db)
+    guardian_service = GuardianService(db=db)
+    user_guardian_service = UserGuardianService(db=db)
+
+    return TelegramOnboardingService(
+        db=db,
+        user_service=user_service,
+        guardian_service=guardian_service,
+        user_guardian_service=user_guardian_service,
+    )
 
 
 # Service dependencies with proper injection

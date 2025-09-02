@@ -36,7 +36,6 @@ async def register_user(
     - **telegram_username**: Telegram username (optional)
     - **first_name**: User's first name (required)
     - **last_name**: User's last name (optional)
-    - **email**: User's email address (optional)
     - **phone_number**: Phone number in E.164 format (optional)
     - **preferred_language**: Language preference (en/ru/es, default: en)
     - **gender**: User's gender (optional)

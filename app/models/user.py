@@ -46,12 +46,6 @@ class User(BaseModel):
         comment="User's last name",
     )
 
-    email = Column(
-        String(255),
-        nullable=True,
-        comment="User's email address",
-    )
-
     phone_number = Column(
         String(20),
         nullable=False,

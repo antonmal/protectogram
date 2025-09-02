@@ -13,7 +13,21 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     # Startup
     print(f"Starting Protectogram in {app.state.settings.environment} mode")
+
+    # Initialize Telegram client
+    from app.integrations.telegram_client import TelegramClient
+
+    app.state.telegram_client = TelegramClient(app.state.settings)
+
+    # Initialize the client for webhook processing
+    if app.state.telegram_client.is_ready():
+        await app.state.telegram_client.initialize_application()
+        print("Telegram bot initialized and ready")
+    else:
+        print("Warning: Telegram bot not ready - check your bot token")
+
     yield
+
     # Shutdown
     print("Shutting down Protectogram")
 
@@ -94,13 +108,10 @@ def setup_routes(app: FastAPI, settings: BaseAppSettings):
         }
 
     # Include API routers
-    from app.api import api_router
+    from app.api import api_router, webhook_router
 
     app.include_router(api_router)
-
-    # TODO: Add webhook routers
-    # from app.api.webhooks import telegram, twilio
-    # app.include_router(telegram.router, prefix="/webhooks/telegram", tags=["webhooks"])
+    app.include_router(webhook_router)
     # app.include_router(twilio.router, prefix="/webhooks/twilio", tags=["webhooks"])
 
 
