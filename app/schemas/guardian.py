@@ -11,16 +11,40 @@ class GuardianBase(BaseModel):
     telegram_user_id: Optional[int] = Field(
         None, description="Telegram user ID for sending messages"
     )
-    phone_number: str = Field(..., pattern=r"^\+[1-9]\d{1,14}$")
+    phone_number: str = Field(..., description="Phone number with country code")
     name: str = Field(..., min_length=1, max_length=100)
     gender: Gender
 
     @field_validator("phone_number")
     @classmethod
     def validate_phone_number(cls, v):
-        if not v.startswith("+"):
-            raise ValueError("Phone number must start with +")
-        return v
+        if not v:
+            return v
+
+        # Normalize: remove spaces, dashes, parentheses
+        normalized = (
+            v.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        )
+
+        # Ensure it starts with +
+        if not normalized.startswith("+"):
+            if normalized.startswith("00"):
+                normalized = "+" + normalized[2:]
+            elif normalized.isdigit() and len(normalized) >= 8:
+                raise ValueError(
+                    "Phone number must include country code (start with +)"
+                )
+            else:
+                normalized = "+" + normalized
+
+        # Basic validation: 8-20 digits after +
+        if len(normalized) < 8 or len(normalized) > 20:
+            raise ValueError("Phone number must be 8-20 digits")
+
+        if not normalized[1:].isdigit():
+            raise ValueError("Phone number can only contain digits after +")
+
+        return normalized
 
 
 class GuardianCreate(GuardianBase):
@@ -29,16 +53,42 @@ class GuardianCreate(GuardianBase):
 
 class GuardianUpdate(BaseModel):
     telegram_user_id: Optional[int] = None
-    phone_number: Optional[str] = Field(None, pattern=r"^\+[1-9]\d{1,14}$")
+    phone_number: Optional[str] = Field(
+        None, description="Phone number with country code"
+    )
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     gender: Optional[Gender] = None
 
     @field_validator("phone_number")
     @classmethod
     def validate_phone_number(cls, v):
-        if v and not v.startswith("+"):
-            raise ValueError("Phone number must start with +")
-        return v
+        if not v:
+            return v
+
+        # Normalize: remove spaces, dashes, parentheses
+        normalized = (
+            v.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        )
+
+        # Ensure it starts with +
+        if not normalized.startswith("+"):
+            if normalized.startswith("00"):
+                normalized = "+" + normalized[2:]
+            elif normalized.isdigit() and len(normalized) >= 8:
+                raise ValueError(
+                    "Phone number must include country code (start with +)"
+                )
+            else:
+                normalized = "+" + normalized
+
+        # Basic validation: 8-20 digits after +
+        if len(normalized) < 8 or len(normalized) > 20:
+            raise ValueError("Phone number must be 8-20 digits")
+
+        if not normalized[1:].isdigit():
+            raise ValueError("Phone number can only contain digits after +")
+
+        return normalized
 
 
 class GuardianResponse(GuardianBase):

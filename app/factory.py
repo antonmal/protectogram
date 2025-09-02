@@ -131,6 +131,11 @@ def setup_routes(app: FastAPI, settings: BaseAppSettings):
     app.include_router(webhook_router)
     # app.include_router(twilio.router, prefix="/webhooks/twilio", tags=["webhooks"])
 
+    # Include admin router (available in all environments with proper auth)
+    from app.api.admin import admin_router
+
+    app.include_router(admin_router, prefix="/api")
+
 
 def setup_error_handlers(app: FastAPI, settings: BaseAppSettings):
     """Configure error handlers."""

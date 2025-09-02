@@ -3,11 +3,9 @@ app = "protectogram-staging"
 primary_region = "cdg"  # Paris
 
 [build]
-  [build.args]
-    ENV = "staging"
+  args = { ENVIRONMENT = "staging" }
 
 [env]
-  ENVIRONMENT = "staging"
   PORT = "8000"
 
 [http_service]
