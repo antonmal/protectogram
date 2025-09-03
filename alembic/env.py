@@ -2,7 +2,6 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
@@ -28,7 +27,11 @@ environment = os.getenv("ENVIRONMENT", "development")
 settings = SettingsFactory.create(environment)
 # Use sync URL for migrations (remove +asyncpg)
 database_url = settings.database_url.replace("+asyncpg", "")
-config.set_main_option("sqlalchemy.url", database_url)
+
+# Handle URL-encoded characters properly for alembic ConfigParser
+# The issue is ConfigParser doesn't handle certain characters well
+# Instead of using ConfigParser, pass URL directly to create_engine
+config.set_main_option("sqlalchemy.url", "placeholder")
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -118,9 +121,11 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # Use the database URL directly to avoid ConfigParser issues with special characters
+    from sqlalchemy import create_engine
+
+    connectable = create_engine(
+        database_url,
         poolclass=pool.NullPool,
     )
 

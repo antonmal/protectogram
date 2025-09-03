@@ -1,0 +1,14 @@
+-r base.txt
+
+# Staging-specific packages
+# Enhanced monitoring and debugging tools for staging environment
+
+# Additional Monitoring (more detailed than prod)
+pytest==8.3.3  # For running tests in staging
+pytest-asyncio==0.24.0
+ipython==8.27.0  # For debugging via console
+rich==13.8.0  # Better error formatting
+
+# Performance monitoring
+psutil==6.1.0  # System monitoring
+memory-profiler==0.61.0  # Memory usage tracking

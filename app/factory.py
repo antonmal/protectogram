@@ -13,7 +13,21 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     # Startup
     print(f"Starting Protectogram in {app.state.settings.environment} mode")
+
+    # Initialize Telegram client
+    from app.integrations.telegram_client import TelegramClient
+
+    app.state.telegram_client = TelegramClient(app.state.settings)
+
+    # Initialize the client for webhook processing
+    if app.state.telegram_client.is_ready():
+        await app.state.telegram_client.initialize_application()
+        print("Telegram bot initialized and ready")
+    else:
+        print("Warning: Telegram bot not ready - check your bot token")
+
     yield
+
     # Shutdown
     print("Shutting down Protectogram")
 
@@ -55,6 +69,23 @@ def create_app(settings: Optional[BaseAppSettings] = None) -> FastAPI:
     return app
 
 
+# Environment-specific app factory functions for deployment
+def create_staging_app() -> FastAPI:
+    """Create staging app instance."""
+    from app.config.settings import SettingsFactory
+
+    settings = SettingsFactory.create("staging")
+    return create_app(settings)
+
+
+def create_production_app() -> FastAPI:
+    """Create production app instance."""
+    from app.config.settings import SettingsFactory
+
+    settings = SettingsFactory.create("production")
+    return create_app(settings)
+
+
 def setup_middleware(app: FastAPI, settings: BaseAppSettings):
     """Configure application middleware."""
 
@@ -93,17 +124,17 @@ def setup_routes(app: FastAPI, settings: BaseAppSettings):
             "redoc": "/redoc",
         }
 
-    # TODO: Add actual API routers
-    # from app.api.v1 import panic, trips, guardians, users
-    # app.include_router(panic.router, prefix="/api/v1/panic", tags=["panic"])
-    # app.include_router(trips.router, prefix="/api/v1/trips", tags=["trips"])
-    # app.include_router(guardians.router, prefix="/api/v1/guardians", tags=["guardians"])
-    # app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+    # Include API routers
+    from app.api import api_router, webhook_router
 
-    # TODO: Add webhook routers
-    # from app.api.webhooks import telegram, twilio
-    # app.include_router(telegram.router, prefix="/webhooks/telegram", tags=["webhooks"])
+    app.include_router(api_router)
+    app.include_router(webhook_router)
     # app.include_router(twilio.router, prefix="/webhooks/twilio", tags=["webhooks"])
+
+    # Include admin router (available in all environments with proper auth)
+    from app.api.admin import admin_router
+
+    app.include_router(admin_router, prefix="/api")
 
 
 def setup_error_handlers(app: FastAPI, settings: BaseAppSettings):

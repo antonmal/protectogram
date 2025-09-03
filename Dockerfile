@@ -19,18 +19,21 @@ RUN apt-get update && apt-get install -y \
 # Create and set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --user --no-warn-script-location -r requirements.txt
+# Copy requirements files for better caching
+COPY requirements/ requirements/
+# Use build argument to determine environment (defaults to production)
+ARG ENVIRONMENT=production
+RUN pip install --user --no-warn-script-location -r requirements/${ENVIRONMENT}.txt
 
 # Production stage
 FROM python:3.11-slim as production
 
 # Set environment variables
+ARG ENVIRONMENT=production
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/home/appuser/.local/bin:$PATH" \
-    ENVIRONMENT=production
+    ENVIRONMENT=${ENVIRONMENT}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

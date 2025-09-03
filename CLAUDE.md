@@ -100,6 +100,33 @@ Four environments with specific configurations:
 
 ## Deployment
 
+### Critical Deployment Changes (2025-09-02)
+
+**IMPORTANT: SSH-based migrations no longer work** - environment variables not available in SSH sessions.
+
+#### New Migration Process
+1. **Deploy application first**: `flyctl deploy --build-arg ENVIRONMENT=staging -a protectogram-staging`
+2. **Run migrations via HTTP**: `curl -H "X-Admin-Key: $SECRET_KEY" https://protectogram-staging.fly.dev/api/admin/migrations/upgrade`
+3. **Verify**: Check migration status: `curl -H "X-Admin-Key: $SECRET_KEY" https://app/api/admin/migrations/status`
+
+#### Build Process Requirements
+- **Must specify environment explicitly**: `--build-arg ENVIRONMENT=staging`
+- **Dockerfile fixed**: `ARG ENVIRONMENT=production` → `ENV ENVIRONMENT=${ENVIRONMENT}`
+- **fly.staging.toml syntax**: `args = { ENVIRONMENT = "staging" }`
+
+#### Migration Endpoints (app/api/admin/migrations.py)
+- `POST /api/admin/migrations/upgrade` - Apply pending migrations
+- `GET /api/admin/migrations/status` - Check current migration state
+- `POST /api/admin/migrations/downgrade` - Rollback one migration
+- `GET /api/admin/migrations/history` - View migration history
+- **Authentication**: Requires `X-Admin-Key` header with `MIGRATION_ADMIN_KEY` (same as `SECRET_KEY`)
+
+#### Phone Number Validation Fixed
+- **Problem**: Regex `^\+[1-9]\d{1,14}$` rejected real-world formats like "(555) 123-4567"
+- **Solution**: Field validators in `app/schemas/user.py` and `app/schemas/guardian.py` normalize input
+- **Supports**: Brackets, spaces, dashes automatically removed and `+` country code ensured
+
+### Legacy Commands (for reference)
 - **Staging**: `make deploy-staging` (uses `fly.staging.toml`)
 - **Production**: `make deploy-prod` (uses `fly.toml`)
 - **Monitoring**: `fly logs --app protectogram-{env}`, `make monitor` (Celery Flower)
