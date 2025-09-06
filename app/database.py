@@ -28,6 +28,17 @@ AsyncSessionLocal = sessionmaker(
 
 # Sync engine for migrations and utilities
 sync_database_url = settings.database_url.replace("+asyncpg", "")
+
+
+async def get_db() -> AsyncSession:
+    """Get database session dependency for FastAPI."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
 sync_engine = create_engine(
     sync_database_url,
     echo=settings.environment == "development",

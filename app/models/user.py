@@ -63,8 +63,8 @@ class User(BaseModel):
     )
 
     # Relationships
-    panic_events = relationship(
-        "Panic", back_populates="user", cascade="all, delete-orphan"
+    panic_alerts = relationship(
+        "PanicAlert", back_populates="user", cascade="all, delete-orphan"
     )
 
     trips = relationship("Trip", back_populates="user", cascade="all, delete-orphan")

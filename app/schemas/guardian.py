@@ -48,7 +48,11 @@ class GuardianBase(BaseModel):
 
 
 class GuardianCreate(GuardianBase):
-    pass
+    invitation_token: Optional[str] = None
+    invited_at: Optional[datetime] = None
+    invitation_expires_at: Optional[datetime] = None
+    verification_status: str = "pending"
+    consent_given: bool = False
 
 
 class GuardianUpdate(BaseModel):
@@ -95,6 +99,11 @@ class GuardianResponse(GuardianBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    invitation_token: Optional[str] = None
+    invited_at: Optional[datetime] = None
+    invitation_expires_at: Optional[datetime] = None
+    verification_status: str = "pending"
+    consent_given: bool = False
 
     class Config:
         from_attributes = True

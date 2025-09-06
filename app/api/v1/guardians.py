@@ -3,7 +3,7 @@
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.auth import get_current_user
 from app.dependencies import get_guardian_service
@@ -169,3 +169,47 @@ async def list_guardians(
         page=page,
         per_page=per_page,
     )
+
+
+@router.post(
+    "/invite",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create guardian invitation",
+)
+async def create_guardian_invitation(
+    guardian_data: GuardianCreate,
+    request: Request,
+    guardian_service: Annotated[GuardianService, Depends(get_guardian_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Create a guardian invitation with registration token.
+
+    This creates a guardian record with an invitation token that can be used
+    for Telegram-based registration. The invitation link format is:
+    https://t.me/YourBot?start=guardian_{token}
+
+    Returns the guardian info and registration token.
+    """
+    try:
+        guardian = await guardian_service.create_guardian_invitation(guardian_data)
+
+        # Generate Telegram invitation link using configured bot
+        from app.dependencies import get_settings
+
+        settings = get_settings(request=request)  # We need to get this from request
+        bot_username = settings.telegram_bot_username.lstrip("@")  # Remove @ if present
+        invitation_link = (
+            f"https://t.me/{bot_username}?start=guardian_{guardian.invitation_token}"
+        )
+
+        return {
+            "guardian": GuardianResponse.model_validate(guardian),
+            "invitation_token": guardian.invitation_token,
+            "invitation_link": invitation_link,
+            "expires_at": guardian.invitation_expires_at.isoformat(),
+            "message": f"Guardian invitation created. Send this link to {guardian.name}: {invitation_link}",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

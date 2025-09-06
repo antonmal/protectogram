@@ -4,7 +4,7 @@ from .base import Base, BaseModel
 from .user import User, Gender
 from .guardian import Guardian
 from .user_guardian import UserGuardian
-from .panic import Panic, PanicStatus
+from .panic import PanicAlert, PanicNotificationAttempt
 from .trip import Trip, TripStatus
 
 __all__ = [
@@ -13,9 +13,9 @@ __all__ = [
     "User",
     "Guardian",
     "UserGuardian",
-    "Panic",
+    "PanicAlert",
+    "PanicNotificationAttempt",
     "Trip",
     "Gender",
-    "PanicStatus",
     "TripStatus",
 ]

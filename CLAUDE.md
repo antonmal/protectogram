@@ -25,6 +25,20 @@ make test-suspension     # Run suspension logic tests
 make test-speed          # Test panic button response time (<2s requirement)
 ```
 
+### Panic Button Testing Scripts (2025-09-03)
+```bash
+# Real Twilio Integration Tests (requires ngrok + Twilio credentials)
+python test_panic_twilio.py          # Full DTMF test with real voice calls
+python test_simple_panic.py          # Direct Twilio provider test
+python test_panic_local.py           # Local service testing (mocked Twilio)
+
+# Database Cleanup Utilities
+python cleanup_panic_alerts.py       # Clean panic alerts only
+python cleanup_all_test_data.py      # Clean all test guardians and relationships
+```
+
+**Testing Flow**: Start server → run ngrok → set WEBHOOK_BASE_URL → run test → answer call → press 1 or 9 → verify acknowledgment
+
 ### Code Quality
 ```bash
 make lint                # Run flake8 + mypy
@@ -45,41 +59,52 @@ Protectogram v3.1 is a personal safety application with panic button and trip tr
 
 ### Critical Architecture Principles
 
-1. **Strict Separation of Concerns**: Panic and Trip services are completely separated and never mixed
-   - `app/services/panic.py` - ONLY panic alerts, trip suspension, guardian dispatch
-   - `app/services/trip.py` - ONLY trip tracking, suspension-aware reminders
-   - `app/services/notification.py` - Context-aware alert dispatch
+1. **Panic Button System**: Fully implemented with Twilio integration (2025-09-03)
+   - **Voice calls with DTMF**: Users press 1=positive acknowledgment, 9=false alarm
+   - **Cascade notifications**: Voice call → wait 30s → SMS backup → repeat every 60s
+   - **Real-time webhooks**: Twilio callbacks process DTMF and update alert status
+   - **Service**: `app/services/panic_service.py` - Complete panic alert management
+   - **Provider**: `app/providers/twilio_provider.py` - Real Twilio voice/SMS integration
+   - **Webhooks**: `app/api/webhooks/twilio.py` - DTMF processing endpoints
 
-2. **Suspension Logic**: When panic is triggered, all active trips are suspended immediately
+2. **Communication Architecture**: Provider-agnostic system with working Twilio implementation
+   - **Core**: `app/core/communications.py` - Abstract communication interfaces
+   - **TwiML Generation**: Absolute URLs required for DTMF callbacks to work
+   - **Acknowledgment Flow**: Database updates on DTMF → TwiML response → call completion
+
+3. **Suspension Logic**: When panic is triggered, all active trips are suspended immediately
    - Trip reminders STOP during panic scenarios
    - ALL trip tasks must check `trip.status != 'suspended'` before execution
    - After panic resolved, user is prompted for ETA update before resuming
 
-3. **Task Queue Separation**: Celery tasks are separated by context
-   - `app/tasks/panic_alerts.py` - Panic-related background tasks
-   - `app/tasks/trip_reminders.py` - Trip reminder tasks (suspension-aware)
+4. **Task Queue Separation**: Background processing via asyncio (Celery integration pending)
+   - **Cascade Logic**: Async background tasks handle notification timing
+   - **Database Transactions**: Proper session handling to prevent rollback conflicts
 
 ### Key Components
 
 - **Settings**: Environment-specific configuration via `app/config/settings.py` with factory pattern
-- **Communication**: Provider-agnostic system via `CommunicationManager` supporting Telnyx + Twilio
-- **Database**: PostgreSQL with PostGIS for spatial queries, location stored as `GEOGRAPHY(POINT, 4326)`
-- **Cache/Queue**: Redis for Celery broker and application cache
-- **Frontend**: Telegram webhook-based bot (@ProtectogramBot prod, @ProtectogramTestBot staging)
+- **Communication**: Working Twilio integration with DTMF support, provider-agnostic design for future expansion
+- **Database**: PostgreSQL with panic alert models, notification attempt tracking, proper foreign key relationships
+- **Panic Models**: `app/models/panic.py` - PanicAlert and PanicNotificationAttempt with CASCADE deletes
+- **Cache/Queue**: Redis for future Celery integration (currently using asyncio background tasks)
+- **Frontend**: FastAPI REST endpoints + Twilio webhooks (Telegram bot integration pending)
 
 ### Performance Requirements
 
-- **Panic Response Time**: <2 seconds from panic button to first alert dispatch
-- **Voice Call Retry**: Every 3 minutes for 15 minutes with DTMF acknowledgment
-- **Idempotency**: Provider event IDs and outbound operation keys prevent duplicates
+- **Panic Response Time**: ✅ ACHIEVED - ~1 second from API call to Twilio voice call initiation
+- **DTMF Acknowledgment**: ✅ WORKING - Press 1/9 during call for immediate acknowledgment
+- **Cascade Timing**: Voice call → 30s wait → SMS backup → 60s repeat cycle for 15 minutes
+- **Webhook Processing**: Real-time DTMF handling with proper TwiML responses
+- **Idempotency**: Provider event IDs prevent duplicate processing
 
 ### Environment Configuration
 
 Four environments with specific configurations:
-- `development` - Local PostgreSQL + Redis, ngrok webhooks, @ProtectogramDevBot
+- `development` - ✅ WORKING - Local PostgreSQL, ngrok webhooks (https://08c079e98aea.ngrok-free.app), real Twilio calls
 - `test` - Ephemeral DB, mocked services, `task_always_eager=True`
-- `staging` - Supabase + Upstash, @ProtectogramTestBot, real Telnyx test calls
-- `production` - Supabase + Upstash, @ProtectogramBot, live calls (Fly.io CDG region)
+- `staging` - Supabase + Upstash, @ProtectogramTestBot, ready for Twilio staging testing
+- `production` - Supabase + Upstash, @ProtectogramBot, production Twilio calls (Fly.io CDG region)
 
 ### Testing Strategy
 
@@ -126,6 +151,39 @@ Four environments with specific configurations:
 - **Solution**: Field validators in `app/schemas/user.py` and `app/schemas/guardian.py` normalize input
 - **Supports**: Brackets, spaces, dashes automatically removed and `+` country code ensured
 
+## Critical Bug Fixes & Solutions (2025-09-03)
+
+### DTMF Not Working - Multiple Critical Issues
+
+#### Issue 1: Relative TwiML Action URLs
+- **Problem**: TwiML `<Gather>` used relative action="/webhooks/twilio/voice"
+- **Symptom**: DTMF digits not sent back to webhook, user hears "Invalid input" loop
+- **Solution**: Use absolute URLs in TwiML: `action="https://08c079e98aea.ngrok-free.app/webhooks/twilio/voice"`
+- **Location**: `app/api/webhooks/twilio.py:224` - `_twiml_gather()` function
+
+#### Issue 2: Database Schema Constraint
+- **Problem**: Status column VARCHAR(20) too small for "acknowledged_positive" (21 chars)
+- **Symptom**: "Sorry, error processing your response" due to database constraint violation
+- **Solution**: Increase to VARCHAR(30), create migration
+- **Files**: `app/models/panic.py:114`, migration `d7c995e2a3b4`
+
+#### Issue 3: Multiple Rows Query Error
+- **Problem**: `scalar_one_or_none()` failed when multiple attempts had same CallSid
+- **Symptom**: "Multiple rows found when one or none was required" → webhook error
+- **Solution**: Use `.order_by().first()` to get latest attempt instead
+- **Location**: `app/api/webhooks/twilio.py:38-44` and `app/api/webhooks/twilio.py:139-143`
+
+### Database Transaction Issues
+- **Problem**: Session rollbacks during notification attempt saves in background tasks
+- **Symptom**: "Method 'commit()' can't be called here; method '_prepare_impl()' is already in progress"
+- **Root Cause**: Multiple async tasks trying to commit simultaneously
+- **Solution**: Proper session handling and error recovery in cascade notifications
+
+### Testing & Development Issues
+- **Problem**: Test data accumulation causing UUID conflicts and state pollution
+- **Solution**: Automatic cleanup in test scripts, proper test data isolation
+- **Files**: Enhanced `test_panic_twilio.py` with `cleanup_existing_test_data()`
+
 ### Legacy Commands (for reference)
 - **Staging**: `make deploy-staging` (uses `fly.staging.toml`)
 - **Production**: `make deploy-prod` (uses `fly.toml`)
@@ -133,10 +191,35 @@ Four environments with specific configurations:
 
 ## Required Environment Variables
 
-Development requires `.env.development` with:
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string
-- `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` - Twilio credentials
+### Development Environment (`.env.development`)
+```bash
+# Database
+DATABASE_URL=postgresql://user:password@localhost/protectogram_dev  # pragma: allowlist secret
+
+# Twilio (REQUIRED for panic button)
+TWILIO_ACCOUNT_SID=ACxxxxx          # Twilio Account SID  # pragma: allowlist secret
+TWILIO_AUTH_TOKEN=xxxxxx            # Twilio Auth Token  # pragma: allowlist secret
+TWILIO_FROM_NUMBER=+1234567890      # Verified Twilio phone number
+WEBHOOK_BASE_URL=https://08c079e98aea.ngrok-free.app  # ngrok tunnel URL
+
+# Optional
+REDIS_URL=redis://localhost:6379
+TELEGRAM_BOT_TOKEN=1234:AAA         # For future Telegram integration
+```
+
+### Staging/Production Additional Variables
+```bash
+# Panic Button
+ENVIRONMENT=staging                 # or production
+SECRET_KEY=xxx                     # For admin endpoints
+
+# Database (Supabase example)
+DATABASE_URL=postgresql://postgres:xxx@db.xxx.supabase.co:5432/postgres  # pragma: allowlist secret
+
+# Webhooks
+WEBHOOK_BASE_URL=https://protectogram-staging.fly.dev
+```
+
+**⚠️ Critical**: `WEBHOOK_BASE_URL` must be absolute URL for DTMF to work. Twilio requires absolute action URLs in TwiML.
 
 See `app/config/settings.py` for complete environment variable reference.

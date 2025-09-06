@@ -1,5 +1,7 @@
 from typing import Optional, List
 from uuid import UUID
+import secrets
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -135,3 +137,47 @@ class GuardianService:
 
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def create_guardian_invitation(
+        self, guardian_data: GuardianCreate, expires_in_days: int = 7
+    ) -> Guardian:
+        """
+        Create a guardian with invitation token for registration.
+
+        Args:
+            guardian_data: Guardian creation data
+            expires_in_days: Days until invitation expires
+
+        Returns:
+            Guardian with invitation token
+        """
+        # Generate unique invitation token
+        invitation_token = secrets.token_urlsafe(32)
+
+        # Set expiration date
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
+        # Create guardian with invitation fields
+        guardian_dict = guardian_data.model_dump()
+        guardian_dict.update(
+            {
+                "invitation_token": invitation_token,
+                "invited_at": datetime.now(timezone.utc),
+                "invitation_expires_at": expires_at,
+                "verification_status": "pending",
+                "consent_given": False,
+            }
+        )
+
+        guardian = Guardian(**guardian_dict)
+        self.db.add(guardian)
+        await self.db.commit()
+        await self.db.refresh(guardian)
+        return guardian
+
+    async def get_by_invitation_token(self, token: str) -> Optional[Guardian]:
+        """Get guardian by invitation token."""
+        result = await self.db.execute(
+            select(Guardian).where(Guardian.invitation_token == token)
+        )
+        return result.scalar_one_or_none()

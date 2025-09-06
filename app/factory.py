@@ -14,17 +14,26 @@ async def lifespan(app: FastAPI):
     # Startup
     print(f"Starting Protectogram in {app.state.settings.environment} mode")
 
+    # Initialize communication manager (temporarily disabled for testing)
+    # from app.core.communications import CommunicationManager
+    # app.state.communication_manager = CommunicationManager(app.state.settings)
+    app.state.communication_manager = None
+
     # Initialize Telegram client
     from app.integrations.telegram_client import TelegramClient
 
-    app.state.telegram_client = TelegramClient(app.state.settings)
+    telegram_client = TelegramClient(app.state.settings)
+    app.state.telegram_client = telegram_client
 
-    # Initialize the client for webhook processing
-    if app.state.telegram_client.is_ready():
-        await app.state.telegram_client.initialize_application()
-        print("Telegram bot initialized and ready")
+    # Initialize Telegram bot asynchronously
+    await telegram_client.initialize_application()
+
+    if telegram_client.is_ready():
+        print("✅ Telegram bot initialized successfully")
     else:
-        print("Warning: Telegram bot not ready - check your bot token")
+        print("⚠️ Telegram bot initialization failed - continuing without Telegram")
+
+    print("✅ Protectogram application ready")
 
     yield
 

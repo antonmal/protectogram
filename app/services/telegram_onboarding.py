@@ -1,12 +1,17 @@
 """Telegram bot onboarding service that integrates with existing User and Guardian APIs."""
 
 import logging
+import secrets
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import Gender
+from app.models.guardian import Guardian
+from app.models.user import Gender, User
+from app.models.user_guardian import UserGuardian
 from app.schemas.user import UserCreate, UserResponse
 from app.schemas.guardian import GuardianCreate, GuardianResponse
 from app.schemas.user_guardian import UserGuardianCreate
@@ -149,12 +154,22 @@ class TelegramOnboardingService:
             except ValueError:
                 gender_enum = Gender.other  # Default fallback
 
-            # Create guardian data
+            # Generate invitation token and expiration (7 days from now)
+            invitation_token = secrets.token_urlsafe(32)
+            invitation_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+            invited_at = datetime.now(timezone.utc)
+
+            # Create guardian data with invitation fields
             guardian_data = GuardianCreate(
                 telegram_user_id=guardian_telegram_id,
                 phone_number=guardian_phone,
                 name=guardian_name,
                 gender=gender_enum,
+                invitation_token=invitation_token,
+                invited_at=invited_at,
+                invitation_expires_at=invitation_expires_at,
+                verification_status="pending",
+                consent_given=False,
             )
 
             # Create guardian
@@ -346,3 +361,208 @@ class TelegramOnboardingService:
             raise ValueError("Phone number can only contain digits after the +")
 
         return phone
+
+    # Guardian Registration Methods
+
+    async def start_guardian_registration(
+        self,
+        telegram_user_id: int,
+        telegram_chat_id: int,
+        telegram_username: Optional[str],
+        telegram_first_name: str,
+        telegram_last_name: Optional[str],
+        registration_token: str,
+    ) -> Dict[str, Any]:
+        """Start guardian registration process via Telegram."""
+        try:
+            # Find guardian by registration token
+            query = select(Guardian).where(
+                Guardian.invitation_token == registration_token
+            )
+            result = await self.db.execute(query)
+            guardian = result.scalar_one_or_none()
+
+            if not guardian:
+                return {"status": "not_found", "message": "Invalid registration token"}
+
+            # Check if token is expired
+            if (
+                guardian.invitation_expires_at
+                and datetime.now(timezone.utc) > guardian.invitation_expires_at
+            ):
+                return {
+                    "status": "expired",
+                    "message": "Registration token has expired",
+                }
+
+            # Check if already registered
+            if guardian.consent_given and guardian.verification_status in [
+                "fully_verified",
+                "telegram_verified",
+            ]:
+                return {
+                    "status": "already_registered",
+                    "message": "Guardian already registered",
+                }
+
+            # Get the user who invited this guardian
+            user_guardian_query = (
+                select(User)
+                .join(UserGuardian, UserGuardian.user_id == User.id)
+                .where(UserGuardian.guardian_id == guardian.id)
+            )
+            result = await self.db.execute(user_guardian_query)
+            inviting_user = result.scalar_one_or_none()
+
+            if not inviting_user:
+                return {"status": "error", "message": "Inviting user not found"}
+
+            # Update guardian with Telegram info (don't commit yet - waiting for consent)
+            guardian.telegram_user_id = telegram_user_id
+            guardian.telegram_chat_id = telegram_chat_id
+            guardian.telegram_username = telegram_username
+
+            return {
+                "status": "success",
+                "guardian": {
+                    "id": str(guardian.id),
+                    "name": guardian.name,
+                    "phone_number": guardian.phone_number,
+                    "verification_status": guardian.verification_status,
+                },
+                "user": {
+                    "id": str(inviting_user.id),
+                    "name": f"{inviting_user.first_name} {inviting_user.last_name or ''}".strip(),
+                    "phone_number": inviting_user.phone_number,
+                },
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error starting guardian registration for token {registration_token}: {e}"
+            )
+            return {"status": "error", "message": f"Registration error: {str(e)}"}
+
+    async def accept_guardian_registration(
+        self,
+        registration_token: str,
+        telegram_user_id: int,
+    ) -> Dict[str, Any]:
+        """Accept guardian registration and complete setup."""
+        try:
+            # Find guardian by registration token
+            query = select(Guardian).where(
+                Guardian.invitation_token == registration_token
+            )
+            result = await self.db.execute(query)
+            guardian = result.scalar_one_or_none()
+
+            if not guardian:
+                return {"status": "error", "message": "Invalid registration token"}
+
+            # Verify this is the same Telegram user (or if not set yet, accept and set it)
+            if (
+                guardian.telegram_user_id
+                and guardian.telegram_user_id != telegram_user_id
+            ):
+                return {"status": "error", "message": "Telegram user mismatch"}
+
+            # Set telegram user ID if not already set
+            if not guardian.telegram_user_id:
+                guardian.telegram_user_id = telegram_user_id
+
+            # Update guardian registration
+            guardian.consent_given = True
+            guardian.registered_at = datetime.now(timezone.utc)
+            guardian.verification_status = "telegram_verified"
+
+            # TODO: Implement phone verification logic
+            # For now, assume Telegram verification is sufficient
+            phone_verified = await self._check_phone_verification(guardian)
+
+            if phone_verified:
+                guardian.verification_status = "fully_verified"
+                verification_status = "fully_verified"
+            else:
+                # Send SMS verification
+                await self._send_phone_verification(guardian)
+                verification_status = "phone_verification_needed"
+
+            await self.db.commit()
+
+            logger.info(
+                f"Guardian {guardian.id} accepted registration, status: {verification_status}"
+            )
+
+            return {
+                "status": "success",
+                "verification_status": verification_status,
+                "guardian_id": str(guardian.id),
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error accepting guardian registration for token {registration_token}: {e}"
+            )
+            await self.db.rollback()
+            return {
+                "status": "error",
+                "message": f"Failed to accept registration: {str(e)}",
+            }
+
+    async def decline_guardian_registration(
+        self,
+        registration_token: str,
+        telegram_user_id: int,
+    ) -> Dict[str, Any]:
+        """Decline guardian registration and clean up."""
+        try:
+            # Find guardian by registration token
+            query = select(Guardian).where(
+                Guardian.invitation_token == registration_token
+            )
+            result = await self.db.execute(query)
+            guardian = result.scalar_one_or_none()
+
+            if not guardian:
+                return {"status": "error", "message": "Invalid registration token"}
+
+            # Mark as declined
+            guardian.verification_status = "declined"
+            guardian.consent_given = False
+
+            # TODO: Notify the user who invited them
+            # For now, just log it
+            logger.info(f"Guardian {guardian.id} declined registration")
+
+            await self.db.commit()
+
+            return {
+                "status": "success",
+                "message": "Registration declined successfully",
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error declining guardian registration for token {registration_token}: {e}"
+            )
+            await self.db.rollback()
+            return {
+                "status": "error",
+                "message": f"Failed to decline registration: {str(e)}",
+            }
+
+    async def _check_phone_verification(self, guardian: Guardian) -> bool:
+        """Check if guardian's phone is already verified (e.g., via Telegram)."""
+        # TODO: Implement logic to check if phone is verified via Telegram API
+        # For testing purposes, consider Telegram verification as sufficient
+        return True  # Accept Telegram verification as sufficient for now
+
+    async def _send_phone_verification(self, guardian: Guardian):
+        """Send SMS verification code to guardian's phone."""
+        # TODO: Implement SMS verification code sending
+        # This should integrate with your SMS provider (Twilio)
+        logger.info(
+            f"SMS verification needed for guardian {guardian.id} phone {guardian.phone_number}"
+        )
+        pass
