@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.auth import get_current_user
-from app.dependencies import get_guardian_service
+from app.dependencies import get_guardian_service, get_user_guardian_service
 from app.models.user import User
 from app.schemas.guardian import (
     GuardianCreate,
@@ -14,7 +14,9 @@ from app.schemas.guardian import (
     GuardianResponse,
     GuardianUpdate,
 )
+from app.schemas.user_guardian import UserGuardianCreate
 from app.services.guardian import GuardianService
+from app.services.user_guardian import UserGuardianService
 
 router = APIRouter(prefix="/guardians", tags=["guardians"])
 
@@ -181,6 +183,9 @@ async def create_guardian_invitation(
     guardian_data: GuardianCreate,
     request: Request,
     guardian_service: Annotated[GuardianService, Depends(get_guardian_service)],
+    user_guardian_service: Annotated[
+        UserGuardianService, Depends(get_user_guardian_service)
+    ],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     """
@@ -193,9 +198,16 @@ async def create_guardian_invitation(
     Returns the guardian info and registration token.
     """
     try:
+        # 1. Create guardian with invitation token
         guardian = await guardian_service.create_guardian_invitation(guardian_data)
 
-        # Generate Telegram invitation link using configured bot
+        # 2. Link guardian to current user (THIS WAS MISSING!)
+        link_data = UserGuardianCreate(guardian_id=guardian.id, priority_order=1)
+        user_guardian = await user_guardian_service.add_guardian_to_user(
+            current_user.id, link_data
+        )
+
+        # 3. Generate Telegram invitation link using configured bot
         from app.dependencies import get_settings
 
         settings = get_settings(request=request)  # We need to get this from request
@@ -209,6 +221,8 @@ async def create_guardian_invitation(
             "invitation_token": guardian.invitation_token,
             "invitation_link": invitation_link,
             "expires_at": guardian.invitation_expires_at.isoformat(),
+            "user_guardian_id": user_guardian.id,  # Include linking info
+            "priority_order": user_guardian.priority_order,
             "message": f"Guardian invitation created. Send this link to {guardian.name}: {invitation_link}",
         }
     except ValueError as e:

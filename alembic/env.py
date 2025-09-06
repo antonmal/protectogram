@@ -25,8 +25,8 @@ if config.config_file_name is not None:
 # Get database URL from settings factory
 environment = os.getenv("ENVIRONMENT", "development")
 settings = SettingsFactory.create(environment)
-# Use sync URL for migrations (remove +asyncpg)
-database_url = settings.database_url.replace("+asyncpg", "")
+# Use sync URL for migrations
+database_url = settings.sync_database_url
 
 # Handle URL-encoded characters properly for alembic ConfigParser
 # The issue is ConfigParser doesn't handle certain characters well

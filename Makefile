@@ -48,6 +48,33 @@ db-migration: ## Create new database migration
 	$(PYTHON_VENV) -m alembic revision --autogenerate -m "$$message"
 	@echo "✅ Migration created"
 
+# Test database management
+test-db-start: ## Start PostgreSQL test database container
+	@echo "Starting test database..."
+	@docker stop protectogram-test-db 2>/dev/null || true
+	@docker rm protectogram-test-db 2>/dev/null || true
+	@docker run -d --name protectogram-test-db \
+		-e POSTGRES_PASSWORD=test \
+		-e POSTGRES_DB=protectogram_test \
+		-p 5433:5432 \
+		postgis/postgis:15-3.3
+	@echo "Waiting for database to be ready..."
+	@sleep 10
+	@echo "✅ Test database ready on port 5433"
+
+test-db-stop: ## Stop and remove test database container
+	@echo "Stopping test database..."
+	@docker stop protectogram-test-db 2>/dev/null || true
+	@docker rm protectogram-test-db 2>/dev/null || true
+	@echo "✅ Test database stopped"
+
+test-db-migrate: ## Run migrations on test database
+	@echo "Running migrations on test database..."
+	@ENVIRONMENT=test DATABASE_URL=postgresql://postgres:test@localhost:5433/protectogram_test $(PYTHON_VENV) -m alembic upgrade head  # pragma: allowlist secret
+	@echo "✅ Test database migrations applied"
+
+test-db-reset: test-db-stop test-db-start test-db-migrate ## Reset test database (stop, start, migrate)
+
 # Redis setup
 redis-setup: ## Start Redis container
 	@echo "Starting Redis..."

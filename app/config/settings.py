@@ -104,6 +104,11 @@ class BaseAppSettings(BaseSettings, ABC):
             ]
         return self.trip_reminder_intervals
 
+    @property
+    def sync_database_url(self) -> str:
+        """Get synchronous database URL for migrations (without +asyncpg)."""
+        return self.database_url.replace("+asyncpg", "")
+
     @abstractmethod
     def get_communication_config(self) -> Dict:
         """Return communication provider configuration."""
@@ -171,10 +176,8 @@ class DevelopmentSettings(BaseAppSettings):
 class TestSettings(BaseAppSettings):
     """Test environment settings."""
 
-    # Test-specific overrides
-    database_url: str = (
-        "postgresql+asyncpg://postgres:test@localhost:5432/protectogram_test"
-    )
+    # Test-specific overrides - Docker PostgreSQL on port 5433
+    database_url: str = "postgresql+asyncpg://postgres:test@localhost:5433/protectogram_test"  # pragma: allowlist secret
     redis_url: str = "redis://localhost:6379/1"
     log_level: str = "WARNING"
 
@@ -324,7 +327,7 @@ class SettingsFactory:
             if environment == "development":
                 return settings_class(
                     environment="development",
-                    database_url="postgresql+asyncpg://postgres:localpass@localhost:5432/protectogram_dev",
+                    database_url="postgresql+asyncpg://postgres:localpass@localhost:5432/protectogram_dev",  # pragma: allowlist secret
                     redis_url="redis://localhost:6379/0",
                     telegram_bot_token="YOUR_DEV_BOT_TOKEN_HERE",  # nosec B106 - Fallback placeholder only
                     telegram_bot_username="@ProtectogramDevBot",
