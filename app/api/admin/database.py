@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config.settings import BaseAppSettings
 from app.dependencies import get_settings
-from app.database import get_async_session
+from app.database import AsyncSessionLocal
 from .models import DatabaseResponse
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def clear_test_data(
     logger.info(f"Database clear requested in {settings.environment} environment")
 
     try:
-        async with get_async_session() as session:
+        async with AsyncSessionLocal() as session:
             # Clear tables in dependency order to avoid foreign key constraints
             tables_to_clear = [
                 "user_guardians",
@@ -175,7 +175,7 @@ async def get_database_status(
         DatabaseResponse: Current database status
     """
     try:
-        async with get_async_session() as session:
+        async with AsyncSessionLocal() as session:
             tables_info = []
 
             # Get table row counts
