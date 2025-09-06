@@ -223,3 +223,4 @@ WEBHOOK_BASE_URL=https://protectogram-staging.fly.dev
 **⚠️ Critical**: `WEBHOOK_BASE_URL` must be absolute URL for DTMF to work. Twilio requires absolute action URLs in TwiML.
 
 See `app/config/settings.py` for complete environment variable reference.
+- to memorize The region used on Fly.io is CDG.

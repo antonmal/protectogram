@@ -49,3 +49,18 @@ class MigrationStatusResponse(BaseModel):
     pending_migrations: List[str] = []
     migration_history: List[str] = []
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DatabaseResponse(BaseModel):
+    """Response model for database operations."""
+
+    status: str = Field(..., description="Operation status: success or error")
+    message: str = Field(..., description="Human-readable message about the operation")
+    environment: Optional[str] = Field(None, description="Current environment")
+    cleared_tables: Optional[List[str]] = Field(
+        None, description="List of cleared tables with row counts"
+    )
+    details: Optional[str] = Field(None, description="Additional operation details")
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow, description="Response timestamp"
+    )
