@@ -78,15 +78,19 @@ async def clear_test_data(
     Returns:
         DatabaseResponse: Confirmation of data clearing
     """
-    # Safety check: Never allow in production
+    # Safety check: Production requires explicit enablement via ADMIN_ENDPOINTS_ENABLED
     if settings.environment == "production":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Database clearing is strictly forbidden in production for safety",
+        if not getattr(settings, "admin_endpoints_enabled", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Database clearing disabled in production. Set ADMIN_ENDPOINTS_ENABLED=true to enable temporarily.",
+            )
+        logger.warning(
+            "🚨 Database clearing enabled in PRODUCTION via ADMIN_ENDPOINTS_ENABLED flag!"
         )
 
-    # Additional safety check for staging/development
-    if settings.environment not in ["staging", "development"]:
+    # Standard safety check for other environments
+    elif settings.environment not in ["staging", "development"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Database clearing only available in staging/development, current: {settings.environment}",
