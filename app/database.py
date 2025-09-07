@@ -16,7 +16,15 @@ async_engine = create_async_engine(
     settings.database_url,
     echo=settings.environment == "development",
     pool_pre_ping=True,
-    pool_recycle=300,
+    pool_recycle=3600
+    if settings.environment == "production"
+    else 300,  # 1 hour in prod, 5 min in dev
+    pool_size=20
+    if settings.environment == "production"
+    else 10,  # More connections in prod
+    max_overflow=30
+    if settings.environment == "production"
+    else 10,  # Allow more overflow in prod
 )
 
 # Async session factory
@@ -43,7 +51,15 @@ sync_engine = create_engine(
     sync_database_url,
     echo=settings.environment == "development",
     pool_pre_ping=True,
-    pool_recycle=300,
+    pool_recycle=3600
+    if settings.environment == "production"
+    else 300,  # 1 hour in prod, 5 min in dev
+    pool_size=10
+    if settings.environment == "production"
+    else 5,  # More connections in prod
+    max_overflow=20
+    if settings.environment == "production"
+    else 5,  # Allow more overflow in prod
 )
 
 # Sync session factory

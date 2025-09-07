@@ -258,6 +258,16 @@ class ProductionSettings(BaseAppSettings):
         ..., validation_alias="WEBHOOK_SECRET"
     )  # Required in prod
 
+    # Production-specific settings
+    log_sql: bool = False  # Never log SQL in production
+    admin_endpoints_enabled: bool = Field(
+        default=False, validation_alias="ADMIN_ENDPOINTS_ENABLED"
+    )  # Admin endpoints disabled by default in prod
+    max_db_connections: int = 50  # Higher connection limit
+
+    # Logging
+    log_level: str = "INFO"  # Less verbose than development
+
     def get_communication_config(self) -> Dict:
         return {
             "twilio": {

@@ -224,3 +224,4 @@ WEBHOOK_BASE_URL=https://protectogram-staging.fly.dev
 
 See `app/config/settings.py` for complete environment variable reference.
 - to memorize The region used on Fly.io is CDG.
+- to memorize Use the staging db endpoint to clear the test data from db as soon as you deploy to staging. (curl -X DELETE "https://protectogram-staging.fly.dev/api/admin/database/clear-test-data"...)

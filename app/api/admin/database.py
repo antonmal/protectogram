@@ -70,15 +70,22 @@ async def clear_test_data(
     settings: BaseAppSettings = Depends(get_settings),
 ):
     """
-    Clear all test data from the database (staging only).
+    Clear all test data from the database (staging/development only).
 
     This endpoint safely truncates all user data tables while preserving
-    the database schema. Only available in staging environment.
+    the database schema. Strictly forbidden in production for safety.
 
     Returns:
         DatabaseResponse: Confirmation of data clearing
     """
-    # Safety check: Only allow in staging
+    # Safety check: Never allow in production
+    if settings.environment == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Database clearing is strictly forbidden in production for safety",
+        )
+
+    # Additional safety check for staging/development
     if settings.environment not in ["staging", "development"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
