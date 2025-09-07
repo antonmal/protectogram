@@ -88,6 +88,11 @@ def get_sync_db():
         db.close()
 
 
+def get_sync_db_session():
+    """Get sync database session for use in context managers (Celery tasks)."""
+    return SessionLocal()
+
+
 async def create_tables():
     """Create all tables in the database."""
     async with async_engine.begin() as conn:

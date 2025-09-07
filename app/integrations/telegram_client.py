@@ -88,6 +88,7 @@ class TelegramClient:
         self.application.add_handler(
             CommandHandler("guardians", self._handle_guardians)
         )
+        self.application.add_handler(CommandHandler("panic", self._handle_panic))
 
         # Text message handler (for conversation flows)
         self.application.add_handler(
@@ -100,7 +101,7 @@ class TelegramClient:
         )
 
         # Callback query handlers (for inline keyboard buttons)
-        self.application.add_handler(CallbackQueryHandler(self._handle_callback))
+        self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
 
     async def process_webhook_update(self, update_data: Dict[str, Any]):
         """Process incoming webhook update from Telegram."""
@@ -1252,3 +1253,255 @@ Need more help? Contact our support team!
         await query.edit_message_text(
             text, reply_markup=reply_markup, parse_mode="Markdown"
         )
+
+    # =============================================================================
+    # PANIC BUTTON HANDLERS
+    # =============================================================================
+
+    async def _handle_panic(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /panic command - immediate emergency alert."""
+
+        if not self.onboarding_service:
+            await update.message.reply_text(
+                "❌ Service not available. Please try again later."
+            )
+            return
+
+        user = update.effective_user
+        logger.info(f"Panic command triggered by user {user.id} ({user.first_name})")
+
+        try:
+            # Get user from database
+            db_user = await self.onboarding_service.get_user_by_telegram_id(user.id)
+            if not db_user:
+                await update.message.reply_text(
+                    "❌ **You need to register first!**\n\n"
+                    "Use /start to create your Protectogram account before using emergency features.",
+                    parse_mode="Markdown",
+                )
+                return
+
+            # Import panic service
+            from app.services.panic_session_service import PanicSessionService
+            from app.database import AsyncSessionLocal
+
+            # Start panic session
+            async with AsyncSessionLocal() as db:
+                panic_service = PanicSessionService(db)
+                session = await panic_service.start_panic_session(
+                    user_id=db_user.id,
+                    message=None,  # No message from /panic command
+                )
+
+            logger.info(f"Panic session {session.id} started for user {user.id}")
+
+            # Send confirmation
+            await update.message.reply_text(
+                "🚨 **PANIC ALERT ACTIVATED** 🚨\n\n"
+                "Your emergency alert has been sent to all your guardians.\n"
+                "They are being contacted immediately.\n\n"
+                f"Alert ID: #{str(session.id)[:8]}\n\n"
+                "Stay calm. Help is on the way.",
+                parse_mode="Markdown",
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to handle panic command: {e}")
+            await update.message.reply_text(
+                "❌ **Failed to send emergency alert!**\n\n"
+                "Please try again or contact emergency services directly.\n"
+                "Emergency numbers: 112 (EU), 911 (US)",
+                parse_mode="Markdown",
+            )
+
+    async def _handle_callback_query(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Handle all callback queries (button presses)."""
+
+        query = update.callback_query
+        await query.answer()  # Acknowledge the callback
+
+        data = query.data
+        logger.info(f"Callback query received: {data} from user {query.from_user.id}")
+
+        try:
+            # Panic button handlers
+            if data == "panic_button":
+                await self._handle_panic_button(query, context)
+            elif data.startswith("panic_ack_"):
+                await self._handle_panic_acknowledgment(query, data, "positive")
+            elif data.startswith("panic_decline_"):
+                await self._handle_panic_acknowledgment(query, data, "negative")
+            elif data.startswith("panic_cancel_"):
+                await self._handle_panic_cancellation(query, data)
+            elif data.startswith("panic_retry_"):
+                await self._handle_panic_retry(query, data)
+            elif data.startswith("panic_status_"):
+                await self._handle_panic_status(query, data)
+
+            # Existing callback handlers (registration, etc.)
+            elif data == "register_start":
+                await self._handle_registration_start(query)
+            elif data.startswith("gender_"):
+                gender = data.split("_")[1]
+                await self._handle_gender_selection(query, gender)
+            elif data.startswith("lang_"):
+                language = data.split("_")[1]
+                await self._handle_language_selection(query, language)
+            elif data == "back_to_start":
+                await self._handle_help(update, context)
+            else:
+                await query.edit_message_text("This feature is coming soon! 🚧")
+
+        except Exception as e:
+            logger.error(f"Error handling callback query {data}: {e}")
+            await query.edit_message_text("❌ An error occurred. Please try again.")
+
+    async def _handle_panic_button(self, query, context):
+        """Handle panic button press from main menu."""
+
+        if not self.onboarding_service:
+            await query.edit_message_text(
+                "❌ Service not available. Please try again later."
+            )
+            return
+
+        user = query.from_user
+        logger.info(f"Panic button pressed by user {user.id} ({user.first_name})")
+
+        try:
+            # Get user from database
+            db_user = await self.onboarding_service.get_user_by_telegram_id(user.id)
+            if not db_user:
+                await query.edit_message_text(
+                    "❌ **You need to register first!**\n\n"
+                    "Use /start to create your Protectogram account before using emergency features.",
+                    parse_mode="Markdown",
+                )
+                return
+
+            # Import panic service
+            from app.services.panic_session_service import PanicSessionService
+            from app.database import AsyncSessionLocal
+
+            # Start panic session
+            async with AsyncSessionLocal() as db:
+                panic_service = PanicSessionService(db)
+                session = await panic_service.start_panic_session(
+                    user_id=db_user.id, message="Emergency assistance needed"
+                )
+
+            logger.info(f"Panic session {session.id} started for user {user.id}")
+
+            # Send confirmation
+            confirmation_text = f"""🚨 **PANIC ALERT ACTIVATED** 🚨
+
+Your emergency alert has been sent to your guardians.
+
+Alert ID: #{str(session.id)[:8]}
+Time: {session.created_at.strftime("%H:%M UTC")}
+Status: 📞 Contacting guardians...
+
+Your guardians are being contacted immediately via:
+• 📱 Telegram message
+• 📞 Voice call
+• 📧 SMS backup
+
+Stay calm. Help is on the way."""
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "🛑 Cancel Alert", callback_data=f"panic_cancel_{session.id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 Alert Status", callback_data=f"panic_status_{session.id}"
+                    )
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                confirmation_text, reply_markup=reply_markup, parse_mode="Markdown"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to handle panic button: {e}")
+            await query.edit_message_text(
+                "❌ **Failed to send emergency alert!**\n\n"
+                "Please try /panic command or contact emergency services directly.\n"
+                "Emergency numbers: 112 (EU), 911 (US)",
+                parse_mode="Markdown",
+            )
+
+    async def _handle_panic_acknowledgment(self, query, data: str, response_type: str):
+        """Handle guardian acknowledgment (positive/negative)."""
+
+        if not self.onboarding_service:
+            await query.edit_message_text("❌ Service not available.")
+            return
+
+        try:
+            # Parse data: panic_ack_SESSION_ID_GUARDIAN_ID or panic_decline_SESSION_ID_GUARDIAN_ID
+            parts = data.split("_")
+            if len(parts) < 4:
+                await query.edit_message_text("❌ Invalid alert data.")
+                return
+
+            session_id = parts[2]
+            guardian_id = parts[3]
+
+            # Import panic service
+            from app.services.panic_session_service import PanicSessionService
+            from app.database import AsyncSessionLocal
+            from uuid import UUID
+
+            # Handle response
+            async with AsyncSessionLocal() as db:
+                panic_service = PanicSessionService(db)
+                await panic_service.handle_guardian_response(
+                    session_id=UUID(session_id),
+                    guardian_id=UUID(guardian_id),
+                    response_type=response_type,
+                    response_method="telegram",
+                )
+
+            if response_type == "positive":
+                await query.edit_message_text(
+                    "✅ **Thank you!**\n\n"
+                    "You have acknowledged the emergency alert.\n"
+                    "The user has been notified that you will assist.\n\n"
+                    "Please contact them as soon as possible."
+                )
+            else:
+                await query.edit_message_text(
+                    "❌ **Understood**\n\n"
+                    "You have indicated that you cannot help at this time.\n"
+                    "You have been excluded from this alert cycle.\n\n"
+                    "Other guardians are still being contacted."
+                )
+
+            logger.info(
+                f"Guardian {guardian_id} responded {response_type} to session {session_id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to handle panic acknowledgment: {e}")
+            await query.edit_message_text(
+                "❌ Failed to process response. Please try again."
+            )
+
+    async def _handle_panic_cancellation(self, query, data: str):
+        """Handle panic session cancellation by user."""
+        await query.edit_message_text("🚧 Panic cancellation feature coming soon!")
+
+    async def _handle_panic_retry(self, query, data: str):
+        """Handle panic session retry by user."""
+        await query.edit_message_text("🚧 Panic retry feature coming soon!")
+
+    async def _handle_panic_status(self, query, data: str):
+        """Handle panic session status check."""
+        await query.edit_message_text("🚧 Panic status feature coming soon!")

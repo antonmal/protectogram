@@ -1,242 +1,176 @@
-"""Twilio webhook handlers for voice calls and SMS responses."""
+"""Twilio webhook handlers for panic session voice calls and SMS responses."""
 
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.database import get_db
-from app.models import PanicNotificationAttempt
-from app.services.panic_service import PanicAlertService
+from app.services.panic_session_service import PanicSessionService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["twilio-webhooks"])
 
 
-@router.post("/voice")
-async def handle_voice_webhook(
+@router.post("/panic-call/{session_id}/{guardian_id}")
+async def handle_panic_call_response(
+    session_id: str,
+    guardian_id: str,
     request: Request,
-    CallSid: str = Form(...),
-    CallStatus: str = Form(...),
-    Digits: str = Form(None),
-    From: str = Form(...),
-    To: str = Form(...),
     db: AsyncSession = Depends(get_db),
+    CallSid: str = Form(None),
+    CallStatus: str = Form(None),
+    Digits: str = Form(None),
 ):
-    """Handle Twilio voice call webhooks for DTMF responses."""
+    """Handle DTMF responses during panic voice calls."""
 
     try:
         logger.info(
-            f"Voice webhook: CallSid={CallSid}, Status={CallStatus}, Digits={Digits}"
+            f"Panic call response: session={session_id}, guardian={guardian_id}, digits={Digits}, status={CallStatus}"
         )
 
-        # Find the latest notification attempt by provider_id (CallSid)
-        query = (
-            select(PanicNotificationAttempt)
-            .where(PanicNotificationAttempt.provider_id == CallSid)
-            .order_by(PanicNotificationAttempt.sent_at.desc())
-        )
-        result = await db.execute(query)
-        attempt = result.scalars().first()
+        # Initialize panic service
+        panic_service = PanicSessionService(db)
 
-        panic_service = PanicAlertService(db)
+        if Digits == "1":
+            # Positive acknowledgment
+            await panic_service.handle_guardian_response(
+                session_id=UUID(session_id),
+                guardian_id=UUID(guardian_id),
+                response_type="positive",
+                response_method="voice",
+            )
 
+            twiml_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Thank you. The user has been notified that you will assist. Please contact them as soon as possible.</Say>
+    <Hangup/>
+</Response>"""
+
+        elif Digits == "0":
+            # Negative response
+            await panic_service.handle_guardian_response(
+                session_id=UUID(session_id),
+                guardian_id=UUID(guardian_id),
+                response_type="negative",
+                response_method="voice",
+            )
+
+            twiml_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Understood. You have been excluded from this alert cycle. Other guardians are being contacted.</Say>
+    <Hangup/>
+</Response>"""
+
+        else:
+            # No digits or invalid response - play prompt
+            webhook_url = f"/webhooks/twilio/panic-call/{session_id}/{guardian_id}"
+
+            twiml_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Emergency alert. A user needs your help. Press 1 if you can assist, or press 0 if you cannot help.</Say>
+    <Gather numDigits="1" timeout="10" action="{webhook_url}">
+        <Say voice="alice">Press 1 to help, or 0 if you cannot assist.</Say>
+    </Gather>
+    <Say voice="alice">No response received. Other guardians are being contacted. Goodbye.</Say>
+    <Hangup/>
+</Response>"""
+
+        return Response(content=twiml_response, media_type="application/xml")
+
+    except Exception as e:
+        logger.error(f"Error handling panic call response: {e}")
+
+        # Return error TwiML
+        error_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Sorry, there was an error processing your response. Please contact the user directly.</Say>
+    <Hangup/>
+</Response>"""
+
+        return Response(content=error_twiml, media_type="application/xml")
+
+
+@router.post("/panic-sms/{session_id}/{guardian_id}")
+async def handle_panic_sms_response(
+    session_id: str,
+    guardian_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    MessageSid: str = Form(None),
+    MessageStatus: str = Form(None),
+    Body: str = Form(None),
+):
+    """Handle SMS responses to panic alerts."""
+
+    try:
         logger.info(
-            f"Processing voice webhook: CallSid={CallSid}, Status={CallStatus}, From={From}, To={To}"
+            f"Panic SMS response: session={session_id}, guardian={guardian_id}, body={Body}, status={MessageStatus}"
         )
 
-        # If no notification attempt found, this might be the initial call setup
-        # Return TwiML to gather digits immediately
-        if not attempt:
-            logger.info(
-                f"No notification attempt found for CallSid {CallSid}, returning gather TwiML"
-            )
-            return Response(
-                content=_twiml_gather(
-                    "Emergency alert! Press 1 to confirm you can help, or press 9 if this is a false alarm."
-                ),
-                media_type="application/xml",
-            )
+        # Initialize panic service
+        panic_service = PanicSessionService(db)
 
-        # Handle DTMF input (digits pressed)
-        if Digits:
-            logger.info(f"DTMF received: {Digits} for CallSid {CallSid}")
-            # Guardian pressed a digit
-            if Digits == "1":
+        if Body:
+            body_clean = Body.strip().lower()
+
+            if body_clean == "1":
                 # Positive acknowledgment
-                logger.info(
-                    f"Processing positive acknowledgment from CallSid {CallSid}"
-                )
-                await panic_service.acknowledge_alert(
-                    alert_id=attempt.panic_alert_id,
-                    guardian_id=attempt.guardian_id,
-                    response="positive",
-                )
-                logger.info(
-                    f"Panic alert {attempt.panic_alert_id} acknowledged positively"
-                )
-                return Response(
-                    content=_twiml_say(
-                        "Thank you. The alert has been acknowledged. Help is on the way."
-                    ),
-                    media_type="application/xml",
+                await panic_service.handle_guardian_response(
+                    session_id=UUID(session_id),
+                    guardian_id=UUID(guardian_id),
+                    response_type="positive",
+                    response_method="sms",
                 )
 
-            elif Digits == "9":
-                # Negative acknowledgment (false alarm)
                 logger.info(
-                    f"Processing negative acknowledgment from CallSid {CallSid}"
+                    f"Guardian {guardian_id} acknowledged session {session_id} via SMS"
                 )
-                await panic_service.acknowledge_alert(
-                    alert_id=attempt.panic_alert_id,
-                    guardian_id=attempt.guardian_id,
-                    response="negative",
+
+            elif body_clean == "0":
+                # Negative response
+                await panic_service.handle_guardian_response(
+                    session_id=UUID(session_id),
+                    guardian_id=UUID(guardian_id),
+                    response_type="negative",
+                    response_method="sms",
                 )
+
                 logger.info(
-                    f"Panic alert {attempt.panic_alert_id} marked as false alarm"
-                )
-                return Response(
-                    content=_twiml_say(
-                        "Thank you. The alert has been marked as a false alarm."
-                    ),
-                    media_type="application/xml",
+                    f"Guardian {guardian_id} declined session {session_id} via SMS"
                 )
 
             else:
-                # Invalid digit
-                logger.info(f"Invalid DTMF digit received: {Digits}")
-                return Response(
-                    content=_twiml_gather(
-                        "Invalid input. Press 1 to confirm emergency or 9 for false alarm."
-                    ),
-                    media_type="application/xml",
+                logger.info(
+                    f"Invalid SMS response '{Body}' from guardian {guardian_id} for session {session_id}"
                 )
 
-        # Handle different call statuses
-        if CallStatus == "completed":
-            logger.info(f"Call {CallSid} completed without DTMF input")
-
-        elif CallStatus in ["no-answer", "busy", "failed"]:
-            # Update attempt status
-            attempt.status = CallStatus.replace("-", "_")
-            await db.commit()
-            logger.info(f"Call attempt {CallSid} status updated to: {CallStatus}")
-
-        elif CallStatus in ["in-progress", "answered"]:
-            # Call was answered, prompt for input
-            return Response(
-                content=_twiml_gather(
-                    "Emergency alert! Press 1 to confirm you can help, or press 9 if this is a false alarm."
-                ),
-                media_type="application/xml",
-            )
-
-        return Response(content=_twiml_empty(), media_type="application/xml")
+        # Twilio expects a 200 response for SMS webhooks
+        return {"status": "received"}
 
     except Exception as e:
-        logger.error(f"Error handling voice webhook: {e}")
-        return Response(
-            content=_twiml_say("Sorry, there was an error processing your response."),
-            media_type="application/xml",
-        )
+        logger.error(f"Error handling panic SMS response: {e}")
+        raise HTTPException(status_code=500, detail="Error processing SMS response")
+
+
+# Legacy webhook endpoints for backward compatibility (if needed)
+@router.post("/voice")
+async def handle_legacy_voice_webhook(request: Request):
+    """Legacy voice webhook - redirects to new panic-specific endpoints."""
+    return Response(
+        content="""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">This endpoint is deprecated. Please use the panic-specific voice endpoints.</Say>
+    <Hangup/>
+</Response>""",
+        media_type="application/xml",
+    )
 
 
 @router.post("/sms")
-async def handle_sms_webhook(
-    request: Request,
-    MessageSid: str = Form(...),
-    MessageStatus: str = Form(...),
-    Body: str = Form(None),
-    From: str = Form(...),
-    To: str = Form(...),
-    db: AsyncSession = Depends(get_db),
-):
-    """Handle Twilio SMS webhook for delivery status and responses."""
-
-    try:
-        logger.info(
-            f"SMS webhook: MessageSid={MessageSid}, Status={MessageStatus}, Body={Body}"
-        )
-
-        # Find the latest notification attempt by provider_id (MessageSid)
-        query = (
-            select(PanicNotificationAttempt)
-            .where(PanicNotificationAttempt.provider_id == MessageSid)
-            .order_by(PanicNotificationAttempt.sent_at.desc())
-        )
-        result = await db.execute(query)
-        attempt = result.scalars().first()
-
-        if not attempt:
-            logger.warning(
-                f"No notification attempt found for MessageSid: {MessageSid}"
-            )
-            return {"status": "ok"}
-
-        # Update delivery status
-        if MessageStatus in ["delivered", "sent", "failed", "undelivered"]:
-            attempt.status = MessageStatus
-            await db.commit()
-            logger.info(f"SMS attempt {MessageSid} status updated to: {MessageStatus}")
-
-        # Handle SMS responses if body contains a response
-        if Body and Body.strip():
-            body_lower = Body.strip().lower()
-            panic_service = PanicAlertService(db)
-
-            if body_lower in ["1", "yes", "ok", "help"]:
-                # Positive acknowledgment
-                await panic_service.acknowledge_alert(
-                    alert_id=attempt.panic_alert_id,
-                    guardian_id=attempt.guardian_id,
-                    response="positive",
-                )
-                logger.info(
-                    f"Panic alert {attempt.panic_alert_id} acknowledged via SMS"
-                )
-
-            elif body_lower in ["9", "no", "false", "alarm"]:
-                # Negative acknowledgment
-                await panic_service.acknowledge_alert(
-                    alert_id=attempt.panic_alert_id,
-                    guardian_id=attempt.guardian_id,
-                    response="negative",
-                )
-                logger.info(
-                    f"Panic alert {attempt.panic_alert_id} marked as false alarm via SMS"
-                )
-
-        return {"status": "ok"}
-
-    except Exception as e:
-        logger.error(f"Error handling SMS webhook: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-def _twiml_gather(message: str) -> str:
-    """Generate TwiML with Gather for digit input."""
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather numDigits="1" timeout="10" action="https://08c079e98aea.ngrok-free.app/webhooks/twilio/voice" method="POST">
-        <Say voice="alice">{message}</Say>
-    </Gather>
-    <Say voice="alice">No input received. Goodbye.</Say>
-</Response>"""
-
-
-def _twiml_say(message: str) -> str:
-    """Generate TwiML with just a message."""
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice">{message}</Say>
-</Response>"""
-
-
-def _twiml_empty() -> str:
-    """Generate empty TwiML response."""
-    return """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-</Response>"""
+async def handle_legacy_sms_webhook(request: Request):
+    """Legacy SMS webhook - for backward compatibility."""
+    return {"status": "deprecated", "message": "Use panic-specific SMS endpoints"}
