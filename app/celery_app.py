@@ -36,6 +36,7 @@ def create_celery_app(environment: str | None = None) -> Celery:
         # Task routing - separate queues for different contexts
         task_routes={
             "app.tasks.panic_alerts.*": {"queue": "panic_alerts"},
+            "app.tasks.panic_notifications.*": {"queue": "panic_alerts"},
             "app.tasks.trip_reminders.*": {"queue": "trip_reminders"},
             "app.tasks.notifications.*": {"queue": "notifications"},
             "app.tasks.cleanup.*": {"queue": "cleanup"},
@@ -50,6 +51,7 @@ def create_celery_app(environment: str | None = None) -> Celery:
     celery_app.autodiscover_tasks(
         [
             "app.tasks.panic_alerts",
+            "app.tasks.panic_notifications",
             "app.tasks.trip_reminders",
             "app.tasks.notifications",
             "app.tasks.cleanup",
